@@ -114,11 +114,15 @@ static void AxsDialRemoveDualButtons(id controller) {
 }
 
 static NSString *AxsDialIdentityTitle(id identity, NSUInteger index) {
-    NSString *title = AxsDialGet(identity, @"localizedName");
+    // Prefer the short, display-appropriate name; localizedName can be a long
+    // format (e.g. a full number or a verbose label) that truncates to "…".
+    NSString *title = AxsDialGet(identity, @"localizedShortName");
     if (![title isKindOfClass:[NSString class]] || !title.length)
-        title = AxsDialGet(identity, @"localizedShortName");
-    if (![title isKindOfClass:[NSString class]] || !title.length)
+        title = AxsDialGet(identity, @"localizedName");
+    if (![title isKindOfClass:[NSString class]] || !title.length ||
+        title.length > 4) {
         title = index == 0 ? @"卡一" : @"卡二";
+    }
     return title;
 }
 
@@ -146,7 +150,7 @@ static void AxsDialUpdateDualButtons(id controller) {
             UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
             button.tag = index == 0 ? 101 : 102;
             button.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-            button.layer.cornerRadius = MIN(18.0, CGRectGetHeight(callButton.frame) / 2.0);
+            button.layer.cornerRadius = 27.0;
             button.layer.masksToBounds = YES;
             button.backgroundColor = colors[index];
             [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
@@ -168,12 +172,17 @@ static void AxsDialUpdateDualButtons(id controller) {
     CGRect originalFrame = callButton.frame;
     CGFloat gap = 2.0;
     CGFloat half = (CGRectGetWidth(originalFrame) - gap) / 2.0;
+    // The call button frame is not guaranteed to be a wide pill; derive a
+    // landscape pill ourselves so the two halves are never tall/narrow.
+    CGFloat pillHeight = MIN(54.0, half);
+    CGFloat pillY = CGRectGetMidY(originalFrame) - pillHeight / 2.0;
     for (NSUInteger index = 0; index < 2; index++) {
         UIButton *button = buttons[index];
         id identity = identities[index];
         objc_setAssociatedObject(button, &AxsDialIdentityKey, identity, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         button.frame = CGRectMake(CGRectGetMinX(originalFrame) + index * (half + gap),
-                                  CGRectGetMinY(originalFrame), half, CGRectGetHeight(originalFrame));
+                                  pillY, half, pillHeight);
+        button.layer.cornerRadius = pillHeight / 2.0;
         [button setTitle:AxsDialIdentityTitle(identity, index) forState:UIControlStateNormal];
         button.accessibilityLabel = AxsDialIdentityTitle(identity, index);
         button.hidden = NO;

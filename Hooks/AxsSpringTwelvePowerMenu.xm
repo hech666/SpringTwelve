@@ -43,28 +43,34 @@ static BOOL axs_springtwelve_powerHomeReady(UIView *home, BOOL needsKeyWindow) {
     for (UIView *view = home; view; view = view.superview) {
         if (view.hidden || view.alpha < 0.99 || !view.userInteractionEnabled) return NO;
     }
-    // Unknown private state is unsupported, never assumed unlocked/non-editing.
-    BOOL locked = YES, editing = YES;
-    if (!axs_springtwelve_powerReadBool(axs_springtwelve_powerShared(@"SBLockScreenManager"),
-                                     @"isUILocked", &locked) || locked) return NO;
-    if (!axs_springtwelve_powerReadBool(axs_springtwelve_powerShared(@"SBIconController"),
-                                     @"isEditing", &editing) || editing) return NO;
+    // Fail only on a positively confirmed dangerous state. An unknown private
+    // selector must not permanently disable the menu: the gesture itself only
+    // fires on the home screen, so an unreadable lock/edit state is treated as
+    // clear rather than failing closed.
+    BOOL locked = NO, editing = NO;
+    if (axs_springtwelve_powerReadBool(axs_springtwelve_powerShared(@"SBLockScreenManager"),
+                                     @"isUILocked", &locked) && locked) return NO;
+    if (axs_springtwelve_powerReadBool(axs_springtwelve_powerShared(@"SBIconController"),
+                                     @"isEditing", &editing) && editing) return NO;
     if (needsKeyWindow && window.rootViewController.presentedViewController) return NO;
     return YES;
 }
 
 static BOOL axs_springtwelve_powerBlankPath(UIView *leaf, UIView *home) {
-    // Deliberate allowlist: icons, widgets, folders, dock, controls, and unknown
-    // hit-test wrappers fail closed. A real icon-list page must be in the path.
+    // Fail closed on obvious interactive content (icons, widgets, folders,
+    // controls) but allow generic container views whose class names vary by
+    // build. A real icon-list page must be in the path.
     BOOL sawList = NO;
     for (UIView *view = leaf; view && view != home; view = view.superview) {
         NSString *name = NSStringFromClass(view.class);
         BOOL list = [name isEqualToString:@"SBIconListView"] ||
                     [name isEqualToString:@"SBRootIconListView"];
-        if (!list && ![name isEqualToString:@"UIView"] &&
-            ![name isEqualToString:@"UIScrollView"] &&
-            ![name isEqualToString:@"SBIconScrollView"]) return NO;
         if ([view isKindOfClass:UIControl.class] || view.hidden || view.alpha < 0.99) return NO;
+        if (!list && ([name containsString:@"IconView"] ||
+                      [name containsString:@"IconLabel"] ||
+                      [name containsString:@"Widget"] ||
+                      [name containsString:@"FolderView"] ||
+                      [name containsString:@"Control"])) return NO;
         if ([view isKindOfClass:UIScrollView.class]) {
             UIScrollView *scroll = (UIScrollView *)view;
             if (scroll.dragging || scroll.decelerating) return NO;
@@ -151,15 +157,15 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
     title.textAlignment = NSTextAlignmentCenter;
     [stack addArrangedSubview:title];
     UILabel *status = [UILabel new];
-    status.text = @"Every supported action requires a separate confirmation. Unsupported actions are disabled; no backend is called.";
+    status.text = @"每个操作都需要二次确认；未支持的操作已禁用，不会调用后端。";
     status.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
     status.numberOfLines = 0;
     status.textAlignment = NSTextAlignmentCenter;
     self.axs_springtwelve_status = status;
     [stack addArrangedSubview:status];
-    NSArray<NSString *> *titles = @[@"Quick respring (SIGTERM)", @"Force respring (SIGKILL)",
-        @"Request safe mode (SIGSEGV)", @"Restart desktop — unsupported",
-        @"Reboot userspace — unsupported", @"Reboot — unsupported", @"Shut down — unsupported"];
+    NSArray<NSString *> *titles = @[@"快速注销 (SIGTERM)", @"强制注销 (SIGKILL)",
+        @"请求安全模式 (SIGSEGV)", @"重启桌面 — 未支持",
+        @"重启用户空间 — 未支持", @"重启设备 — 未支持", @"关机 — 未支持"];
     const int signals[] = {SIGTERM, SIGKILL, SIGSEGV};
     for (NSUInteger index = 0; index < titles.count; index++) {
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -325,6 +331,24 @@ static void axs_springtwelve_powerInstall(UIView *home) {
 %end
 %end
 
+static void axs_springtwelve_powerCollectHomeViews(UIView *view, Class homeClass, NSMutableArray *found) {
+    if (!view) return;
+    if ([view isKindOfClass:homeClass]) [found addObject:view];
+    for (UIView *sub in view.subviews) axs_springtwelve_powerCollectHomeViews(sub, homeClass, found);
+}
+
+static void axs_springtwelve_powerInstallExisting(Class homeClass) {
+    if (![NSThread isMainThread]) return;
+    NSMutableArray *found = [NSMutableArray array];
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:UIWindowScene.class]) continue;
+        for (UIWindow *window in ((UIWindowScene *)scene).windows) {
+            axs_springtwelve_powerCollectHomeViews(window.rootViewController.view, homeClass, found);
+        }
+    }
+    for (UIView *home in found) axs_springtwelve_powerInstall(home);
+}
+
 %ctor {
     @autoreleasepool {
         if (![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.springboard"] ||
@@ -333,5 +357,11 @@ static void axs_springtwelve_powerInstall(UIView *home) {
         if (!homeClass || ![homeClass isSubclassOfClass:UIView.class] ||
             !class_getInstanceMethod(homeClass, @selector(didMoveToWindow))) return;
         %init(AxsSpringTwelvePowerMenuHooks, AxsSpringTwelvePowerMenuHomeView = homeClass);
+        // Retroactive install: if the root folder view already moved to a window
+        // before this tweak loaded, the didMoveToWindow hook never fires.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            axs_springtwelve_powerInstallExisting(homeClass);
+        });
     }
 }

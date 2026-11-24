@@ -575,9 +575,6 @@ static BOOL AxsSpringTwelveDeleteRecording(AxsSpringTwelveRecording *record, NSE
 @end
 
 // Guarded, process-scoped hooks. Unknown controllers/tab identities are deliberately left alone.
-static char AxsSpringTwelveOriginalRecordingTabKey;
-static char AxsSpringTwelveUpdatingRecordingTabsKey;
-static NSHashTable<UITabBarController *> *AxsSpringTwelveRecordingTabControllers;
 static NSMutableSet<NSString *> *AxsSpringTwelveHookedRecordingClasses;
 static NSMutableArray *AxsSpringTwelveRecordingObservers;
 
@@ -599,115 +596,151 @@ static NSInteger AxsSpringTwelveRecordingTabRole(UIViewController *controller) {
     }
     return 0;
 }
-static void AxsSpringTwelveApplyRecordingTabs(UITabBarController *controller) {
-    if (!NSThread.isMainThread || ![controller isKindOfClass:UITabBarController.class] ||
-        [objc_getAssociatedObject(controller, &AxsSpringTwelveUpdatingRecordingTabsKey) boolValue] || controller.tabBar.isCustomizing) return;
-    [AxsSpringTwelveRecordingTabControllers addObject:controller];
-    NSArray<UIViewController *> *current = controller.viewControllers;
-    if (!current.count) return;
-    NSMutableArray<UIViewController *> *updated = [current mutableCopy];
-    BOOL changed = NO;
-    BOOL enabled = AxsSpringTwelveOn(@"callRecordingListEnabled");
-    for (NSUInteger index = 0; index < current.count; ++index) {
-        UIViewController *visible = current[index];
-        UIViewController *saved = objc_getAssociatedObject(visible, &AxsSpringTwelveOriginalRecordingTabKey);
-        UIViewController *original = saved ?: visible;
-        NSInteger role = AxsSpringTwelveRecordingTabRole(original);
-        BOOL replace = enabled && ((role == 1 && AxsSpringTwelveOn(@"captureReplaceFavoritesTab")) ||
-                                   (role == 2 && AxsSpringTwelveOn(@"captureReplaceVoicemailTab")));
-        if (replace && !saved) {
-            AxsSpringTwelveRecordingListViewController *list = [AxsSpringTwelveRecordingListViewController new];
-            UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:list];
-            navigation.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"录音" image:[UIImage systemImageNamed:@"waveform"] tag:original.tabBarItem.tag];
-            navigation.tabBarItem.accessibilityIdentifier = role == 1 ? @"axs.springtwelve.recordings.favorites" : @"axs.springtwelve.recordings.voicemail";
-            objc_setAssociatedObject(navigation, &AxsSpringTwelveOriginalRecordingTabKey, original, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            updated[index] = navigation;
-            changed = YES;
-        } else if (!replace && saved) {
-            updated[index] = original;
-            changed = YES;
-        }
-    }
-    if (!changed) return;
-    NSUInteger selectedIndex = controller.selectedIndex;
-    objc_setAssociatedObject(controller, &AxsSpringTwelveUpdatingRecordingTabsKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    @try {
-        [controller setViewControllers:updated animated:NO];
-        if (selectedIndex < updated.count) controller.selectedIndex = selectedIndex;
-    } @finally {
-        objc_setAssociatedObject(controller, &AxsSpringTwelveUpdatingRecordingTabsKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
+
+// Guarded, process-scoped tab replacement. Mirrors the clean-room MUtool
+// approach: hook the known Favorites/Voicemail controllers' appearance and
+// mount the recording list as a child view controller, instead of swapping the
+// tab controller's viewControllers array (which depends on private class names
+// and signatures that are not stable across builds).
+static char AxsSpringTwelveRecordingMountKey;
+static char AxsSpringTwelveRecordingRoleKey;
+static char AxsSpringTwelveOriginalTabItemKey;
+static char AxsSpringTwelveOriginalNavTitleKey;
+static char AxsSpringTwelveOriginalNavLeftKey;
+static char AxsSpringTwelveOriginalNavRightKey;
+static char AxsSpringTwelveOriginalNavSearchKey;
+static NSHashTable *AxsSpringTwelveMountedRecordingHosts;
+
+static BOOL AxsSpringTwelveRecordingShouldReplace(NSInteger role) {
+    if (!AxsSpringTwelveOn(@"callRecordingListEnabled")) return NO;
+    if (role == 1) return AxsSpringTwelveOn(@"captureReplaceFavoritesTab");
+    if (role == 2) return AxsSpringTwelveOn(@"captureReplaceVoicemailTab");
+    return NO;
 }
-static const char *AxsSpringTwelveUnqualifiedRecordingType(const char *type) {
-    while (type && *type && strchr("rnNoORV", *type)) ++type;
-    return type;
-}
-static BOOL AxsSpringTwelveRecordingHookSignature(Method method, unsigned arguments, BOOL arrayArgument, BOOL booleanArgument) {
-    if (!method || method_getNumberOfArguments(method) != arguments) return NO;
-    char *result = method_copyReturnType(method);
-    const char *returnType = AxsSpringTwelveUnqualifiedRecordingType(result);
-    BOOL valid = returnType && *returnType == 'v';
-    free(result);
-    if (valid && arrayArgument) {
-        char *argument = method_copyArgumentType(method, 2);
-        const char *type = AxsSpringTwelveUnqualifiedRecordingType(argument);
-        valid = type && *type == '@';
-        free(argument);
+
+static void AxsSpringTwelveUnmountRecordingChild(UIViewController *host) {
+    if (!host) return;
+    UIViewController *list = objc_getAssociatedObject(host, &AxsSpringTwelveRecordingMountKey);
+    if ([list isKindOfClass:UIViewController.class]) {
+        [list willMoveToParentViewController:nil];
+        [list.view removeFromSuperview];
+        [list removeFromParentViewController];
     }
-    if (valid && booleanArgument) {
-        char *argument = method_copyArgumentType(method, arguments - 1);
-        const char *type = AxsSpringTwelveUnqualifiedRecordingType(argument);
-        valid = type && (*type == 'B' || *type == 'c');
-        free(argument);
-    }
-    return valid;
+    objc_setAssociatedObject(host, &AxsSpringTwelveRecordingMountKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    UITabBarItem *originalItem = objc_getAssociatedObject(host, &AxsSpringTwelveOriginalTabItemKey);
+    if ([originalItem isKindOfClass:UITabBarItem.class]) host.tabBarItem = originalItem;
+    NSString *originalTitle = objc_getAssociatedObject(host, &AxsSpringTwelveOriginalNavTitleKey);
+    if ([originalTitle isKindOfClass:NSString.class]) host.navigationItem.title = originalTitle;
+    NSArray *left = objc_getAssociatedObject(host, &AxsSpringTwelveOriginalNavLeftKey);
+    if ([left isKindOfClass:NSArray.class]) host.navigationItem.leftBarButtonItems = left;
+    NSArray *right = objc_getAssociatedObject(host, &AxsSpringTwelveOriginalNavRightKey);
+    if ([right isKindOfClass:NSArray.class]) host.navigationItem.rightBarButtonItems = right;
+    UISearchController *search = objc_getAssociatedObject(host, &AxsSpringTwelveOriginalNavSearchKey);
+    if ([search isKindOfClass:UISearchController.class] || search == nil)
+        host.navigationItem.searchController = search;
+
+    objc_setAssociatedObject(host, &AxsSpringTwelveOriginalTabItemKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(host, &AxsSpringTwelveOriginalNavTitleKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(host, &AxsSpringTwelveOriginalNavLeftKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(host, &AxsSpringTwelveOriginalNavRightKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(host, &AxsSpringTwelveOriginalNavSearchKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
-static void AxsSpringTwelveInstallRecordingMethod(Class target, SEL selector, BOOL arrayArgument, BOOL booleanArgument) {
-    Method method = class_getInstanceMethod(target, selector);
-    unsigned arguments = 2 + (arrayArgument ? 1 : 0) + (booleanArgument ? 1 : 0);
-    if (!AxsSpringTwelveRecordingHookSignature(method, arguments, arrayArgument, booleanArgument)) return;
+
+static void AxsSpringTwelveMountRecordingChild(UIViewController *host, NSInteger role) {
+    if (!host) return;
+    if (![host isViewLoaded] || !host.view.window) {
+        // Not yet on screen; the viewDidAppear hook retries.
+        return;
+    }
+    BOOL shouldReplace = AxsSpringTwelveRecordingShouldReplace(role);
+    NSInteger mountedRole = [objc_getAssociatedObject(host, &AxsSpringTwelveRecordingRoleKey) integerValue];
+    if (!shouldReplace || role != mountedRole) {
+        AxsSpringTwelveUnmountRecordingChild(host);
+        objc_setAssociatedObject(host, &AxsSpringTwelveRecordingRoleKey, @(role), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (!shouldReplace) return;
+    }
+    if (objc_getAssociatedObject(host, &AxsSpringTwelveRecordingMountKey)) return;
+
+    AxsSpringTwelveRecordingListViewController *list = [AxsSpringTwelveRecordingListViewController new];
+    [list view]; // Force viewDidLoad so the search controller / folder button exist.
+
+    UITabBarItem *originalItem = host.tabBarItem;
+    if (originalItem) {
+        objc_setAssociatedObject(host, &AxsSpringTwelveOriginalTabItemKey, originalItem, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        UITabBarItem *item = [[UITabBarItem alloc] initWithTitle:@"录音"
+            image:[UIImage systemImageNamed:@"waveform"] tag:originalItem.tag];
+        item.accessibilityIdentifier = role == 1 ? @"axs.springtwelve.recordings.favorites" : @"axs.springtwelve.recordings.voicemail";
+        host.tabBarItem = item;
+    }
+    objc_setAssociatedObject(host, &AxsSpringTwelveOriginalNavTitleKey, host.navigationItem.title, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(host, &AxsSpringTwelveOriginalNavLeftKey, host.navigationItem.leftBarButtonItems, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(host, &AxsSpringTwelveOriginalNavRightKey, host.navigationItem.rightBarButtonItems, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(host, &AxsSpringTwelveOriginalNavSearchKey, host.navigationItem.searchController, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+
+    // Adopt the list's search bar and folder button on the host's navigation bar.
+    host.navigationItem.title = @"通话录音";
+    host.navigationItem.leftBarButtonItems = @[];
+    host.navigationItem.rightBarButtonItems = list.navigationItem.rightBarButtonItems;
+    host.navigationItem.searchController = list.navigationItem.searchController;
+
+    [host addChildViewController:list];
+    list.view.frame = host.view.bounds;
+    list.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [host.view addSubview:list.view];
+    [list didMoveToParentViewController:host];
+    objc_setAssociatedObject(host, &AxsSpringTwelveRecordingMountKey, list, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(host, &AxsSpringTwelveRecordingRoleKey, @(role), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [AxsSpringTwelveMountedRecordingHosts addObject:host];
+}
+
+static void AxsSpringTwelveUpdateRecordingTab(UIViewController *controller) {
+    if (!NSThread.isMainThread || !controller) return;
+    NSInteger role = AxsSpringTwelveRecordingTabRole(controller);
+    if (role == 0) return;
+    AxsSpringTwelveMountRecordingChild(controller, role);
+}
+
+static void AxsSpringTwelveSwizzleAppearance(Class cls, SEL selector) {
+    Method method = class_getInstanceMethod(cls, selector);
+    if (!method) return;
     IMP original = method_getImplementation(method);
-    IMP replacement;
-    if (arrayArgument && booleanArgument) {
-        replacement = imp_implementationWithBlock(^(UITabBarController *owner, NSArray *controllers, BOOL animated) {
-            ((void (*)(id, SEL, id, BOOL))original)(owner, selector, controllers, animated);
-            AxsSpringTwelveApplyRecordingTabs(owner);
-        });
-    } else if (arrayArgument) {
-        replacement = imp_implementationWithBlock(^(UITabBarController *owner, NSArray *controllers) {
-            ((void (*)(id, SEL, id))original)(owner, selector, controllers);
-            AxsSpringTwelveApplyRecordingTabs(owner);
-        });
-    } else {
-        replacement = imp_implementationWithBlock(^(UITabBarController *owner, BOOL animated) {
-            ((void (*)(id, SEL, BOOL))original)(owner, selector, animated);
-            AxsSpringTwelveApplyRecordingTabs(owner);
-        });
-    }
-    // Add an override for inherited methods; never modify UITabBarController globally.
-    const char *encoding = method_getTypeEncoding(method);
-    if (!class_addMethod(target, selector, replacement, encoding)) class_replaceMethod(target, selector, replacement, encoding);
+    const char *types = method_getTypeEncoding(method);
+    IMP replacement = imp_implementationWithBlock(^(UIViewController *vc, BOOL animated) {
+        ((void (*)(id, SEL, BOOL))original)(vc, selector, animated);
+        AxsSpringTwelveUpdateRecordingTab(vc);
+    });
+    if (!class_addMethod(cls, selector, replacement, types))
+        class_replaceMethod(cls, selector, replacement, types);
 }
+
 static void AxsSpringTwelveInstallRecordingTabHooks(void) {
     if (!NSThread.isMainThread || ![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.mobilephone"]) return;
-    for (NSString *name in @[@"PhoneTabBarController", @"PHPhoneTabBarController", @"MPPhoneTabBarController"]) {
-        Class target = NSClassFromString(name);
-        if (!target || ![target isSubclassOfClass:UITabBarController.class] || [AxsSpringTwelveHookedRecordingClasses containsObject:name]) continue;
-        // Do not install even one override unless all UIKit contracts needed for replacement exist.
-        if (!AxsSpringTwelveRecordingHookSignature(class_getInstanceMethod(target, @selector(setViewControllers:animated:)), 4, YES, YES) ||
-            !AxsSpringTwelveRecordingHookSignature(class_getInstanceMethod(target, @selector(viewWillAppear:)), 3, NO, YES)) continue;
-        AxsSpringTwelveInstallRecordingMethod(target, @selector(setViewControllers:animated:), YES, YES);
-        AxsSpringTwelveInstallRecordingMethod(target, @selector(setViewControllers:), YES, NO);
-        AxsSpringTwelveInstallRecordingMethod(target, @selector(viewWillAppear:), NO, YES);
+    NSArray *concrete = @[@"MPFavoritesTableViewController", @"MPVoicemailTableViewController",
+                          @"PHVoicemailInboxListViewController", @"VMVoicemailListViewController"];
+    for (NSString *name in concrete) {
+        Class cls = NSClassFromString(name);
+        if (!cls || ![cls isSubclassOfClass:UIViewController.class]) continue;
+        if ([AxsSpringTwelveHookedRecordingClasses containsObject:name]) continue;
+        AxsSpringTwelveSwizzleAppearance(cls, @selector(viewWillAppear:));
+        AxsSpringTwelveSwizzleAppearance(cls, @selector(viewDidAppear:));
         [AxsSpringTwelveHookedRecordingClasses addObject:name];
     }
+    // Global UIViewController fallback (MUtool does the same). Role detection
+    // returns 0 for unrelated controllers, so this is cheap and idempotent.
+    if (![AxsSpringTwelveHookedRecordingClasses containsObject:@"__global__"]) {
+        Class base = UIViewController.class;
+        AxsSpringTwelveSwizzleAppearance(base, @selector(viewWillAppear:));
+        AxsSpringTwelveSwizzleAppearance(base, @selector(viewDidAppear:));
+        [AxsSpringTwelveHookedRecordingClasses addObject:@"__global__"];
+    }
 }
+
 %ctor {
     @autoreleasepool {
-        // The existing injection filter is intentionally not changed by this module.
         if ([NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.mobilephone"]) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                AxsSpringTwelveRecordingTabControllers = [NSHashTable weakObjectsHashTable];
+                AxsSpringTwelveMountedRecordingHosts = [NSHashTable weakObjectsHashTable];
                 AxsSpringTwelveHookedRecordingClasses = [NSMutableSet set];
                 AxsSpringTwelveRecordingObservers = [NSMutableArray array];
                 AxsSpringTwelveInstallRecordingTabHooks();
@@ -715,8 +748,10 @@ static void AxsSpringTwelveInstallRecordingTabHooks(void) {
                     id observer = [NSNotificationCenter.defaultCenter addObserverForName:name object:nil queue:NSOperationQueue.mainQueue
                         usingBlock:^(NSNotification *note) {
                             AxsSpringTwelveInstallRecordingTabHooks();
-                            for (UITabBarController *controller in AxsSpringTwelveRecordingTabControllers.allObjects)
-                                AxsSpringTwelveApplyRecordingTabs(controller);
+                            for (UIViewController *host in AxsSpringTwelveMountedRecordingHosts.allObjects) {
+                                NSInteger role = [objc_getAssociatedObject(host, &AxsSpringTwelveRecordingRoleKey) integerValue];
+                                AxsSpringTwelveMountRecordingChild(host, role);
+                            }
                         }];
                     [AxsSpringTwelveRecordingObservers addObject:observer];
                 }
@@ -724,3 +759,4 @@ static void AxsSpringTwelveInstallRecordingTabHooks(void) {
         }
     }
 }
+
