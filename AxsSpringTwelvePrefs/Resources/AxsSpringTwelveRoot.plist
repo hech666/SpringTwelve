@@ -15,10 +15,12 @@
     <dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>隐藏小组件名称</string><key>key</key><string>hideWidgetLabels</string><key>defaults</key><string>com.axs.springtwelve</string><key>default</key><false/><key>footerText</key><string>只隐藏桌面小组件下方名称，不影响小组件内容。</string></dict>
     <dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>隐藏低电量提醒</string><key>key</key><string>hideLowBatteryAlert</string><key>defaults</key><string>com.axs.springtwelve</string><key>default</key><false/></dict>
     <dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>隐藏桌面图标名称</string><key>key</key><string>hideHomeIconLabels</string><key>defaults</key><string>com.axs.springtwelve</string><key>default</key><false/><key>footerText</key><string>隐藏 App 和文件夹图标名称，与小组件名称独立控制。</string></dict>
+    <dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>桌面下滑手势</string></dict>
+    <dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>桌面左边下滑呼出通知中心</string><key>key</key><string>homeLeftPullDownNotificationCenter</string><key>defaults</key><string>com.axs.springtwelve</string><key>default</key><false/></dict>
+    <dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>桌面右边下滑呼出控制中心</string><key>key</key><string>homeRightPullDownControlCenter</string><key>defaults</key><string>com.axs.springtwelve</string><key>default</key><false/></dict>
     <dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>常规</string></dict>
     <dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>注销不锁屏</string><key>key</key><string>noLockAfterRespring</string><key>defaults</key><string>com.axs.springtwelve</string><key>default</key><false/><key>footerText</key><string>注销或重启 SpringBoard 后直接进入桌面。</string></dict>
     <dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>彻底关闭 Wi-Fi / 蓝牙</string><key>key</key><string>disconnectWiFiBT</string><key>defaults</key><string>com.axs.springtwelve</string><key>default</key><false/><key>footerText</key><string>通过控制中心关闭时，执行彻底断开流程。</string></dict>
-    <dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>自动解锁 Face ID</string><key>key</key><string>autoDismissFaceID</string><key>defaults</key><string>com.axs.springtwelve</string><key>default</key><false/><key>footerText</key><string>Face ID 自动重试仍受系统安全锁定限制。</string></dict>
   </array>
 </dict>
 </plist>
