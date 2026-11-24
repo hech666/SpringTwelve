@@ -8,6 +8,7 @@ static BOOL AxsSpringTwelveLibraryOff(void) { return AxsSpringTwelveOn(@"disable
 - (id)trailingCustomViewController;
 @end
 
+%group AxsSpringTwelveSpringBoardPages
 %hook SBRootFolderControllerConfiguration
 - (NSUInteger)ignoresOverscrollOnFirstPageOrientations {
     return AxsSpringTwelveTodayOff() ? 0 : %orig;
@@ -122,3 +123,16 @@ static BOOL AxsSpringTwelveHasCoverSheetTarget(id pan) {
     %orig;
 }
 %end
+
+%end // AxsSpringTwelveSpringBoardPages
+
+%ctor {
+    @autoreleasepool {
+        if (![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.springboard"]) return;
+        NSArray<NSString *> *classes = @[@"SBRootFolderControllerConfiguration", @"SBRootFolderView",
+            @"SBIconController", @"SBRootFolderController", @"SBHIconManager",
+            @"SBMainDisplayPolicyAggregator", @"SBSearchGesture", @"CSScrollView"];
+        for (NSString *name in classes) if (!NSClassFromString(name)) return;
+        %init(AxsSpringTwelveSpringBoardPages);
+    }
+}

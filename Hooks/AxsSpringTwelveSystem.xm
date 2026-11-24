@@ -3,6 +3,7 @@
 static BOOL axs_springtwelve_lowPower(id item) {
     return AxsSpringTwelveOn(@"hideLowBatteryAlert") && [item isKindOfClass:NSClassFromString(@"SBLowPowerAlertItem")];
 }
+%group AxsSpringTwelveSpringBoardSystem
 %hook SBAlertItemsController
 - (void)activateAlertItem:(id)item { if (!axs_springtwelve_lowPower(item)) %orig; }
 - (void)activateAlertItem:(id)item animated:(BOOL)animated { if (!axs_springtwelve_lowPower(item)) %orig; }
@@ -13,3 +14,14 @@ static BOOL axs_springtwelve_lowPower(id item) {
 %hook SBBootDefaults
 - (BOOL)dontLockAfterCrash { if (AxsSpringTwelveOn(@"noLockAfterRespring")) return YES; return %orig; }
 %end
+
+%end // AxsSpringTwelveSpringBoardSystem
+
+%ctor {
+    @autoreleasepool {
+        if (![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.springboard"]) return;
+        if (!NSClassFromString(@"SBAlertItemsController") || !NSClassFromString(@"SBLowPowerAlertItem") ||
+            !NSClassFromString(@"SBBootDefaults")) return;
+        %init(AxsSpringTwelveSpringBoardSystem);
+    }
+}

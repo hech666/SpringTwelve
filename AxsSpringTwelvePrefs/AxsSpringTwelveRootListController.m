@@ -2,6 +2,8 @@
 #import "AxsSpringTwelvePreferences.h"
 #import <Preferences/PSSpecifier.h>
 #import <UIKit/UIKit.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#import <objc/message.h>
 
 
 @interface AxsSpringTwelveRootListController ()
@@ -15,6 +17,8 @@
                                                            target:self] mutableCopy];
         [items addObject:[PSSpecifier preferenceSpecifierNamed:@"关于我们" target:self
                      set:nil get:nil detail:nil cell:PSGroupCell edit:nil]];
+        [self axs_springtwelve_addButton:@"录音列表" action:@selector(axs_springtwelve_openRecordings:) to:items];
+        [self axs_springtwelve_addButton:@"打开录音目录" action:@selector(axs_springtwelve_openRecordingsFolder:) to:items];
         [self axs_springtwelve_addButton:@"Sileo 越狱源" action:@selector(axs_springtwelve_openRepository:) to:items];
         [self axs_springtwelve_addButton:@"TG分享频道" action:@selector(axs_springtwelve_openTelegram:) to:items];
         [self axs_springtwelve_addButton:@"QQ交流群组" action:@selector(axs_springtwelve_openQQ:) to:items];
@@ -48,6 +52,25 @@
         [self presentViewController:alert animated:YES completion:nil];
         [self reloadSpecifiers];
     }
+}
+
+- (void)axs_springtwelve_openRecordings:(id)sender {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"通话录音"
+        message:@"录音列表入口会在电话 App 中由启用的 SpringTwelve 模块提供。当前版本不会自动录音。"
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"打开录音目录" style:UIAlertActionStyleDefault
+        handler:^(__unused UIAlertAction *action) { [self axs_springtwelve_openRecordingsFolder:sender]; }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)axs_springtwelve_openRecordingsFolder:(id)sender {
+    NSURL *directoryURL = [NSURL fileURLWithPath:@"/var/mobile/Documents/CallRecordings" isDirectory:YES];
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
+        initForOpeningContentTypes:@[UTTypeFolder] asCopy:NO];
+    picker.directoryURL = directoryURL;
+    picker.allowsMultipleSelection = NO;
+    [self presentViewController:picker animated:YES completion:nil];
 }
 
 - (void)axs_springtwelve_openURL:(NSURL *)url fallback:(NSURL *)fallback {

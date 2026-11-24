@@ -2,6 +2,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 #import "AxsSpringTwelveSwitches.h"
+%group AxsSpringTwelveSpringBoardVisual
 
 @interface SBHomeGrabberView : UIView @end
 @interface CSHomeAffordanceView : UIView
@@ -75,3 +76,15 @@ static BOOL AxsSpringTwelveHideLabel(SBIconView *view) {
 %hook SBIconController
 - (BOOL)iconManager:(id)manager iconViewDisplaysLabel:(SBIconView *)view { return %orig && !AxsSpringTwelveHideLabel(view); }
 %end
+
+%end // AxsSpringTwelveSpringBoardVisual
+
+%ctor {
+    @autoreleasepool {
+        if (![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.springboard"]) return;
+        NSArray<NSString *> *classes = @[@"SBHomeGrabberView", @"CSHomeAffordanceView", @"SBIconView",
+            @"SBHIconManager", @"SBIconController"];
+        for (NSString *name in classes) if (!NSClassFromString(name)) return;
+        %init(AxsSpringTwelveSpringBoardVisual);
+    }
+}

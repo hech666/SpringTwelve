@@ -1,4 +1,6 @@
 packages/
 .build/
+.theos/
 theos*/
+artifacts/
 .DS_Store

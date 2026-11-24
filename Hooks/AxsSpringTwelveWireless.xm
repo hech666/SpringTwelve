@@ -67,14 +67,15 @@ static void ChangeScope(id monitor, BOOL entering) {
 
 %ctor {
     @autoreleasepool {
+        if (![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.springboard"]) return;
         dlopen("/System/Library/PrivateFrameworks/BluetoothManager.framework/BluetoothManager", RTLD_LAZY);
         dlopen("/System/Library/PrivateFrameworks/WiFiKit.framework/WiFiKit", RTLD_LAZY);
         Class bt = NSClassFromString(@"BluetoothManager");
-        if (class_getInstanceMethod(bt, @selector(bluetoothStateActionWithCompletion:))) {
+        if (bt && class_getInstanceMethod(bt, @selector(bluetoothStateActionWithCompletion:))) {
             %init(WirelessBluetooth);
         }
         Class wifi = NSClassFromString(@"WFControlCenterStateMonitor");
-        if (class_getInstanceMethod(wifi, @selector(performAction:)) &&
+        if (wifi && class_getInstanceMethod(wifi, @selector(performAction:)) &&
             class_getInstanceMethod(wifi, @selector(_airplaneModeEnabled))) {
             %init(WirelessWiFi);
         }

@@ -115,6 +115,7 @@
 
 static const void *AxsSpringTwelveHalfPullTargetKey = &AxsSpringTwelveHalfPullTargetKey;
 
+%group AxsSpringTwelveSpringBoardHalfPull
 %hook SBRootFolderView
 - (void)didMoveToWindow {
     %orig;
@@ -133,3 +134,15 @@ static const void *AxsSpringTwelveHalfPullTargetKey = &AxsSpringTwelveHalfPullTa
     objc_setAssociatedObject(self, AxsSpringTwelveHalfPullTargetKey, target, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 }
 %end
+
+%end // AxsSpringTwelveSpringBoardHalfPull
+
+%ctor {
+    @autoreleasepool {
+        if (![NSBundle.mainBundle.bundleIdentifier isEqualToString:@"com.apple.springboard"]) return;
+        Class rootView = NSClassFromString(@"SBRootFolderView");
+        if (!rootView || ![rootView isSubclassOfClass:UIView.class] ||
+            !class_getInstanceMethod(rootView, @selector(didMoveToWindow))) return;
+        %init(AxsSpringTwelveSpringBoardHalfPull);
+    }
+}

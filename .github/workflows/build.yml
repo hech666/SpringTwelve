@@ -46,6 +46,7 @@ jobs:
           test -n "$DYLIB"
           xcrun lipo "$DYLIB" -verify_arch arm64e
           xcrun lipo "$DYLIB" -archs
+          test "$(find "$RUNNER_TEMP/deb-root" -name '*.dylib' | wc -l | tr -d ' ')" = "1"
           test -f "$RUNNER_TEMP/deb-root/var/jb/Library/PreferenceBundles/AxsSpringTwelvePrefs.bundle/Info.plist" -o -f "$RUNNER_TEMP/deb-root/Library/PreferenceBundles/AxsSpringTwelvePrefs.bundle/Info.plist"
       - uses: actions/upload-artifact@v4
         with:
