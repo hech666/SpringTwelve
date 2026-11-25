@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+# Use numeric root ownership for every member without changing file modes.
+exec dpkg-deb --root-owner-group "$@"
