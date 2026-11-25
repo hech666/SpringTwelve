@@ -109,26 +109,6 @@
     "defaults": "com.axs.springtwelve",
     "default": false
   },
-  "callRecordingEnabled": {
-    "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
-    "default": false
-  },
-  "callRecordingListEnabled": {
-    "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
-    "default": false
-  },
-  "captureReplaceFavoritesTab": {
-    "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
-    "default": false
-  },
-  "captureReplaceVoicemailTab": {
-    "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
-    "default": false
-  },
   "lsPowerMenuOnDesktop": {
     "cell": "PSSwitchCell",
     "defaults": "com.axs.springtwelve",

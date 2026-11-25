@@ -10,9 +10,9 @@
 			<key>cell</key>
 			<string>PSLinkCell</string>
 			<key>label</key>
-			<string>电话和录音</string>
+			<string>电话设置</string>
 			<key>detail</key>
-			<string>AxsSpringTwelvePhoneRecordingListController</string>
+			<string>AxsSpringTwelvePhoneListController</string>
 		</dict>
 		<dict>
 			<key>cell</key>

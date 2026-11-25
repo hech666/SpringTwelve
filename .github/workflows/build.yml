@@ -29,7 +29,7 @@ jobs:
           cp -a "$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk" "$THEOS/sdks/"
       - name: Verify preference navigation and key contract
         run: python3 scripts/verify-preferences.py
-      - name: Build arm64e Roothide package and pinned LAME MP3 helper
+      - name: Build arm64e Roothide package without recording
         shell: bash
         run: |
           set -euo pipefail
@@ -38,41 +38,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          DEB=$(find packages -type f -name '*.deb' -print -quit)
-          test -n "$DEB"
+          DEB=$(python3 -c 'from pathlib import Path; print(next(Path("packages").glob("*.deb")))')
           dpkg-deb --info "$DEB"
           dpkg-deb --contents "$DEB"
-          mkdir "$RUNNER_TEMP/deb-root"
-          dpkg-deb -x "$DEB" "$RUNNER_TEMP/deb-root"
-          DYLIB=$(find "$RUNNER_TEMP/deb-root" -name AxsSpringTwelve.dylib -print -quit)
-          test -n "$DYLIB"
-          xcrun lipo "$DYLIB" -verify_arch arm64e
-          xcrun lipo "$DYLIB" -archs
-          test "$(find "$RUNNER_TEMP/deb-root" -name '*.dylib' | wc -l | tr -d ' ')" = "1"
-          HELPER_RECORD=$(find "$RUNNER_TEMP/deb-root" -path '*/usr/local/bin/MUtoolRecord' -type f -print -quit)
-          HELPER_MIXER=$(find "$RUNNER_TEMP/deb-root" -path '*/usr/local/bin/MUtoolMixer' -type f -print -quit)
-          test -n "$HELPER_RECORD" -a -n "$HELPER_MIXER"
-          test -x "$HELPER_RECORD" -a -x "$HELPER_MIXER"
-          xcrun lipo "$HELPER_RECORD" -verify_arch arm64e
-          xcrun lipo "$HELPER_MIXER" -verify_arch arm64e
-          test "$(shasum -a 256 "$HELPER_RECORD" | cut -d ' ' -f 1)" = "f00d1331cd5c820432ba23fd3616cbc836f2e4b84df6ce2c3babc58381b0baea"
-          test "$(shasum -a 256 "$HELPER_MIXER" | cut -d ' ' -f 1)" = "368d638ffdc2724431be66fbb8586a2d0521a1bef70c54b1731b9b891278fa60"
-          ldid -e "$HELPER_RECORD" | grep -q 'com.apple.coreaudio.CanTapTelephony'
-          ldid -e "$HELPER_RECORD" | grep -q 'com.apple.coreaudio.private.SystemWideTap'
-          test -f "$RUNNER_TEMP/deb-root/var/jb/Library/PreferenceBundles/AxsSpringTwelvePrefs.bundle/Info.plist" -o -f "$RUNNER_TEMP/deb-root/Library/PreferenceBundles/AxsSpringTwelvePrefs.bundle/Info.plist"
-          python3 scripts/verify-recording-package.py "$DEB"
-      - name: Package separate LGPL relink materials
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -s artifacts/MP3Relink/AxsSpringTwelveMP3Mixer.o
-          test -s artifacts/MP3Relink/libmp3lame.a
-          (cd artifacts && zip -qr ../packages/SpringTwelve-MP3Relink-${GITHUB_RUN_NUMBER}.zip MP3Relink)
+          python3 scripts/verify-package.py "$DEB"
       - uses: actions/upload-artifact@v4
         with:
           name: SpringTwelve-Roothide-${{ github.run_number }}
-          path: |
-            packages/*.deb
-            packages/*MP3Relink*.zip
+          path: packages/*.deb
           if-no-files-found: error
           retention-days: 30

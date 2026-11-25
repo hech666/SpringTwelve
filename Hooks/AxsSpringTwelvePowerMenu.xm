@@ -20,7 +20,7 @@ static void axs_springtwelve_powerLog(NSString *event) {
     if (last && [now timeIntervalSinceDate:last] < 30.0) return;
     AxsSpringTwelvePowerMenuLogTimes[event] = now;
     @try {
-        NSString *directory = [axs_springtwelve_recordingDirectory() stringByAppendingPathComponent:@"Diagnostics"];
+        NSString *directory = @"/var/mobile/Library/Logs/SpringTwelve";
         NSFileManager *manager = NSFileManager.defaultManager;
         [manager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @0700} error:NULL];
         NSString *path = [directory stringByAppendingPathComponent:@"power-menu.log"];

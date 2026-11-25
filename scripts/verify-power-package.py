@@ -68,10 +68,9 @@ with tempfile.TemporaryDirectory(prefix='st-power-verify-') as tmp:
                 'com.apple.private.xpc.launchd.userspace-reboot-now']:
         assert entitlements.get(key) is True, key
     print('Power helper ownership, setuid mode and dedicated entitlements PASS')
-    for name,digest in {
-        'MUtoolRecord':'f00d1331cd5c820432ba23fd3616cbc836f2e4b84df6ce2c3babc58381b0baea',
-        'MUtoolMixer':'368d638ffdc2724431be66fbb8586a2d0521a1bef70c54b1731b9b891278fa60'
-    }.items():
-        matches=list(root.rglob(name)); assert len(matches)==1
-        assert hashlib.sha256(matches[0].read_bytes()).hexdigest()==digest
-        print(name,'original helper SHA256 PASS')
+    for name in ['MUtoolRecord','MUtoolMixer','AxsSpringTwelveMP3Mixer']:
+        assert not list(root.rglob(name)), ('Recording helper must not ship',name)
+    data = dylibs[0].read_bytes()
+    for marker in [b'AxsSpringTwelveCallRecorder', b'AxsSpringTwelveRecordingsController', b'callRecordingEnabled', b'captureReplaceFavoritesTab', b'CallRecordings']:
+        assert marker not in data, ('Recording code must not link',marker)
+    print('Recording code/helpers absent PASS')
