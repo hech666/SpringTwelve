@@ -1,0 +1,137 @@
+{
+  "disableTodayView": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "disableAppLibrary": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "disableHomePullDownSearch": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "disableLockScreenCamera": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "autoDismissFaceID": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "disableNotificationWake": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "disableLockScreenTodayView": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "disableFlashlight": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "disableCamera": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "hideHomeBar": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "hideWidgetLabels": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "hideLowBatteryAlert": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "hideHomeIconLabels": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "homeLeftPullDownNotificationCenter": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "homeRightPullDownControlCenter": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "noLockAfterRespring": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "disconnectWiFiBT": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "allowPasteWithoutPrompt": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "captureDualSimDialerEnabled": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "captureT9DialerEnabled": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "disablePhoneFavoritesTab": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "disablePhoneVoicemailTab": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "callRecordingEnabled": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "callRecordingListEnabled": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "captureReplaceFavoritesTab": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "captureReplaceVoicemailTab": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
+  "lsPowerMenuOnDesktop": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  }
+}

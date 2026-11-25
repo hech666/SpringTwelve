@@ -1,7 +1,6 @@
 // Clean-room recording browser only: this module never captures calls or imports audio.
 #import <UIKit/UIKit.h>
 #import <AVFoundation/AVFoundation.h>
-#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <objc/runtime.h>
 #import <dlfcn.h>
 #import <dirent.h>
@@ -28,14 +27,15 @@
 static NSString * const AxsSpringTwelveRecordingsChanged = @"com.axs.springtwelve.preferences-changed";
 static NSString * const AxsSpringTwelveRecordingStateChanged = @"com.axs.springtwelve.call-recording-state";
 static NSURL *AxsSpringTwelveRecordingsURL(void) {
-    // Shared user-data path: Roothide resolves jbroot; Rootful/Rootless stay unprefixed.
+    // Shared user-data path is the real mobile Documents folder on every scheme.
     NSString *path = axs_springtwelve_recordingDirectory();
     return path.isAbsolutePath ? [NSURL fileURLWithPath:path isDirectory:YES] : nil;
 }
 static BOOL AxsSpringTwelveOwnedRecordingName(NSString *name) {
     if (!name.length || ![name isEqualToString:name.lastPathComponent] || [name containsString:@"/"]) return NO;
-    if ([name hasPrefix:@"AxsSpringTwelve-"] && [name hasSuffix:@".m4a"])
-        return name.length > @"AxsSpringTwelve-.m4a".length;
+    if ([name hasPrefix:@"AxsSpringTwelve-"] &&
+        [@[@"mp3", @"m4a", @"mp4"] containsObject:name.pathExtension.lowercaseString])
+        return name.stringByDeletingPathExtension.length > @"AxsSpringTwelve-".length;
     // Legacy ownership still requires an audio extension; arbitrary prefixed documents are excluded.
     return [name hasPrefix:@"SpringTwelve-"] && name.stringByDeletingPathExtension.length > @"SpringTwelve-".length &&
         [@[@"m4a", @"caf", @"wav", @"aif", @"aiff", @"mp3", @"aac"] containsObject:name.pathExtension.lowercaseString];
@@ -177,7 +177,7 @@ static BOOL AxsSpringTwelveDeleteRecording(AxsSpringTwelveRecording *record, NSE
 }
 
 @interface AxsSpringTwelveRecordingListViewController : UIViewController
-    <UITableViewDataSource, UITableViewDelegate, UISearchResultsUpdating, AVAudioPlayerDelegate, UIDocumentPickerDelegate> {
+    <UITableViewDataSource, UITableViewDelegate, UISearchResultsUpdating, AVAudioPlayerDelegate> {
     UITableView *_axs_springtwelve_table;
     UISearchController *_axs_springtwelve_search;
     UILabel *_axs_springtwelve_empty;
@@ -231,7 +231,7 @@ static BOOL AxsSpringTwelveDeleteRecording(AxsSpringTwelveRecording *record, NSE
     _axs_springtwelve_search.searchBar.placeholder = @"搜索文件名或日期";
     self.navigationItem.searchController = _axs_springtwelve_search;
     self.definesPresentationContext = YES;
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"文件夹"
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"打开录音目录"
         style:UIBarButtonItemStylePlain target:self action:@selector(axs_springtwelve_openRecordingsFolder)];
     _axs_springtwelve_table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     _axs_springtwelve_table.dataSource = self;
@@ -563,20 +563,15 @@ static BOOL AxsSpringTwelveDeleteRecording(AxsSpringTwelveRecording *record, NSE
     }
     if (descriptor < 0) { [self axs_springtwelve_error:error.localizedDescription ?: @"无法打开录音目录。"]; return; }
     close(descriptor);
-    dlopen("/System/Library/Frameworks/UniformTypeIdentifiers.framework/UniformTypeIdentifiers", RTLD_LAZY | RTLD_LOCAL);
-    Class typeClass = NSClassFromString(@"UTType");
-    UTType *folder = [typeClass respondsToSelector:@selector(typeWithIdentifier:)] ? [typeClass typeWithIdentifier:@"public.folder"] : nil;
-    if (!folder || ![UIDocumentPickerViewController instancesRespondToSelector:@selector(initForOpeningContentTypes:asCopy:)]) {
-        [self axs_springtwelve_error:@"此系统不提供可用的文件夹浏览器。"]; return;
-    }
-    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[folder] asCopy:NO];
-    picker.directoryURL = AxsSpringTwelveRecordingsURL();
-    picker.allowsMultipleSelection = NO;
-    picker.delegate = self;
-    [self presentViewController:picker animated:YES completion:nil];
-}
-- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
-    // Folder navigation only. Never access, import, persist, or enumerate the user's selection.
+    NSURLComponents *components = [NSURLComponents new];
+    components.scheme = @"filza";
+    components.host = @"";
+    components.path = axs_springtwelve_recordingDirectory();
+    [[UIApplication sharedApplication] openURL:components.URL options:@{} completionHandler:^(BOOL success) {
+        if (!success) dispatch_async(dispatch_get_main_queue(), ^{
+            [self axs_springtwelve_error:@"无法打开 Filza，请确认已安装 Filza。"];
+        });
+    }];
 }
 @end
 

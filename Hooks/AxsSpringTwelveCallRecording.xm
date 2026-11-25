@@ -15,8 +15,8 @@
 #import "AxsSpringTwelvePreferences.h"
 #import "AxsSpringTwelveSwitches.h"
 
-// The two helper executables are bundled from the audited MUtool build. This
-// coordinator only owns lifecycle and files; audio capture remains in MUtool.
+// Capture remains in the original audited MUtoolRecord executable; MP3 encoding
+// is isolated in AxsSpringTwelveMP3Mixer. This coordinator owns lifecycle/files.
 
 typedef void (*AxsSpringTwelveCTCallback)(CFNotificationCenterRef, void *, CFStringRef, const void *, CFDictionaryRef);
 typedef CFNotificationCenterRef (*AxsSpringTwelveCTGetDefault)(void);
@@ -358,7 +358,7 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
     }
     AxsSpringTwelveRecordLog(@"start requested");
     NSString *recordHelper = AxsSpringTwelveResolveHelper(@"MUtoolRecord");
-    NSString *mixerHelper = AxsSpringTwelveResolveHelper(@"MUtoolMixer");
+    NSString *mixerHelper = AxsSpringTwelveResolveHelper(@"AxsSpringTwelveMP3Mixer");
     if (!recordHelper || !mixerHelper) {
         AxsSpringTwelveRecordLog(@"helper missing");
         dispatch_async(dispatch_get_main_queue(), ^{ [self->_axs_springtwelve_indicator axs_springtwelve_showFailure:@"组件缺失"]; });
@@ -371,11 +371,20 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
         dispatch_async(dispatch_get_main_queue(), ^{ [self->_axs_springtwelve_indicator axs_springtwelve_showFailure:@"目录不可写"]; });
         return;
     }
-    NSString *base = [axs_springtwelve_recordingDirectory() stringByAppendingPathComponent:
-                      [NSString stringWithFormat:@"AxsSpringTwelve-%@", NSUUID.UUID.UUIDString]];
+    NSString *identifier = [NSString stringWithFormat:@"AxsSpringTwelve-%@", NSUUID.UUID.UUIDString];
+    // CAF is a capture intermediate, never a second user-facing recording.
+    NSString *workDirectory = [axs_springtwelve_recordingDirectory() stringByAppendingPathComponent:@".work"];
+    if (![manager createDirectoryAtPath:workDirectory withIntermediateDirectories:YES
+                             attributes:@{NSFilePosixPermissions: @0700} error:NULL]) {
+        AxsSpringTwelveRecordLog(@"unable to create recording work directory");
+        dispatch_async(dispatch_get_main_queue(), ^{ [self->_axs_springtwelve_indicator axs_springtwelve_showFailure:@"临时目录不可写"]; });
+        return;
+    }
+    NSString *base = [workDirectory stringByAppendingPathComponent:identifier];
     _axs_springtwelve_downstreamPath = [base stringByAppendingString:@"-downstream.caf"];
     _axs_springtwelve_upstreamPath = [base stringByAppendingString:@"-upstream.caf"];
-    _axs_springtwelve_outputPath = [base stringByAppendingString:@".m4a"];
+    _axs_springtwelve_outputPath = [[axs_springtwelve_recordingDirectory() stringByAppendingPathComponent:identifier]
+                                  stringByAppendingString:@".mp3"];
     _axs_springtwelve_generation++;
     NSUInteger generation = _axs_springtwelve_generation;
     _axs_springtwelve_waitGroup = dispatch_group_create();
@@ -426,6 +435,15 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
 }
 
 - (void)axs_springtwelve_failStartLocked {
+    // Wait for any partially started capture worker before removing its files.
+    dispatch_group_t group = _axs_springtwelve_waitGroup;
+    NSString *downstream = [_axs_springtwelve_downstreamPath copy];
+    NSString *upstream = [_axs_springtwelve_upstreamPath copy];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        if (group && dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC)) != 0) return;
+        if (downstream.length) unlink(downstream.fileSystemRepresentation);
+        if (upstream.length) unlink(upstream.fileSystemRepresentation);
+    });
     _axs_springtwelve_active = NO;
     _axs_springtwelve_speakerWorker = nil;
     _axs_springtwelve_micWorker = nil;
@@ -446,7 +464,7 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
     NSString *downstream = [_axs_springtwelve_downstreamPath copy];
     NSString *upstream = [_axs_springtwelve_upstreamPath copy];
     NSString *output = [_axs_springtwelve_outputPath copy];
-    NSString *mixer = AxsSpringTwelveResolveHelper(@"MUtoolMixer");
+    NSString *mixer = AxsSpringTwelveResolveHelper(@"AxsSpringTwelveMP3Mixer");
     dispatch_group_t group = _axs_springtwelve_waitGroup;
     NSUInteger generation = _axs_springtwelve_generation;
     [speaker axs_springtwelve_requestStop];
@@ -456,7 +474,7 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         long waitResult = group ? dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC)) : 0;
         if (waitResult != 0) {
-            if (output.length) unlink(output.fileSystemRepresentation);
+            // The encoder publishes only after success; do not remove a final-name collision.
             AxsSpringTwelveRecordLog(@"capture workers did not stop in time");
             dispatch_async(self->_axs_springtwelve_queue, ^{
                 [self axs_springtwelve_finishFailure:@"结束超时" generation:generation];
@@ -506,8 +524,8 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
                     [[NSNotificationCenter defaultCenter] postNotificationName:AxsSpringTwelveRecordingStateChanged object:nil];
                 });
             } else {
-                unlink(output.fileSystemRepresentation);
-                AxsSpringTwelveRecordLog(@"mixer produced no valid output");
+                // Failure retains both recovery inputs and any pre-existing final file.
+                AxsSpringTwelveRecordLog(@"mixer failed; CAF inputs retained in .work");
                 [self axs_springtwelve_finishFailure:@"未生成有效文件" generation:generation];
             }
         });
@@ -526,16 +544,19 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
     _axs_springtwelve_waitGroup = nil;
     NSString *downstream = [_axs_springtwelve_downstreamPath copy];
     NSString *upstream = [_axs_springtwelve_upstreamPath copy];
-    NSString *output = [_axs_springtwelve_outputPath copy];
     [speaker axs_springtwelve_requestStop];
     [mic axs_springtwelve_requestStop];
     AxsSpringTwelveRecordLog(@"capture aborted: %@", reason);
     dispatch_async(dispatch_get_main_queue(), ^{ [self->_axs_springtwelve_indicator axs_springtwelve_showFailure:reason]; });
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        if (group) dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC));
-        if (downstream.length) unlink(downstream.fileSystemRepresentation);
-        if (upstream.length) unlink(upstream.fileSystemRepresentation);
-        if (output.length) unlink(output.fileSystemRepresentation);
+        if (group && dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC)) != 0) return;
+        // Keep non-empty failed capture inputs available for recovery, never list them.
+        struct stat info = {};
+        for (NSString *path in @[downstream ?: @"", upstream ?: @""]) {
+            if (path.length && stat(path.fileSystemRepresentation, &info) == 0 && info.st_size <= 128)
+                unlink(path.fileSystemRepresentation);
+        }
+        // No encoder ran on this abort path, so there is no final output to remove.
     });
 }
 

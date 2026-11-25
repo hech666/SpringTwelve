@@ -17,12 +17,8 @@ static inline NSString *axs_springtwelve_resourcePath(NSString *rootfsPath) {
 }
 
 static inline NSString *axs_springtwelve_recordingDirectory(void) {
-    NSString *path = @"/var/mobile/Documents/CallRecordings";
-#ifdef THEOS_PACKAGE_SCHEME_ROOTHIDE
-    return jbroot(path);
-#else
-    return path;
-#endif
+    // User recordings live in the real mobile Documents folder on every scheme.
+    return @"/var/mobile/Documents/CallRecordings";
 }
 
 static inline NSString *axs_springtwelve_preferencesPath(void) {
