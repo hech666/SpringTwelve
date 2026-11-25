@@ -18,6 +18,12 @@
 - 禁用标签优先于录音替换，不主动补回 incoming 中已消失的标签；取消禁用后的标签重建仍按 phone-tabs.md 完全重开电话的约定。
 - 不改自动录音采集引擎、存储路径、电源执行、MUtoolRecord/MUtoolMixer；列表播放/删除/搜索/分享逻辑保持，仅修改首屏刷新与 inset。
 
+## 5.2.0-23 点选闪退的窄修复
+
+用户提供 MobilePhone-2026-11-25-221534.ips：iOS 16.6.1，`EXC_CRASH / SIGABRT`，异常栈从 UIKit `_tabBarItemClicked:` 进入本模块 `setSelectedViewController:`，再进入 Phone 原生实现触发 Foundation 断言。与 23 版反汇编对应，落在最终 `%orig(controller)` 分支，而非递归。
+
+旧判断只处理 `resolved != controller`，当参数本身就是 replacement 时漏入 Phone 原生 setter。现在直接按 entry 识别 original 或 replacement，统一映射到已安装 replacement，并调用 `UITabBarController` 基类公开 setter IMP；不再把自有 controller 传给 Phone 原生 setter。安装中尚未挂入数组时只暂存 pending；未受管的原生页仍 `%orig`。删除旧的差异判断与 `%orig(resolved)` 路径，不增私有索引 hook、异常吞噬或重试。
+
 ## 验证与待真机验收
 
 Logos + iOS16.5 SDK + modern arm64e + ARC + Wall/Werror 预检、git diff --check，以及未改采集/路径/helpers 的差异检查分别执行。编译与静态审阅不证明目标设备所有私有 Phone 重选路径已覆盖。

@@ -64,6 +64,34 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>label</key>
+			<string>自动面容解锁后关闭锁屏</string>
+			<key>key</key>
+			<string>autoDismissFaceID</string>
+			<key>defaults</key>
+			<string>com.axs.springtwelve</string>
+			<key>default</key>
+			<false/>
+			<key>footerText</key>
+			<string>面容识别成功后直接进入桌面，不改变身份验证要求。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>通知时不点亮屏幕</string>
+			<key>key</key>
+			<string>disableNotificationWake</string>
+			<key>defaults</key>
+			<string>com.axs.springtwelve</string>
+			<key>default</key>
+			<false/>
+			<key>footerText</key>
+			<string>阻止通知触发屏幕点亮；通知本身仍按系统设置送达。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
 			<string>禁用锁屏右滑负一屏</string>
 			<key>key</key>
 			<string>disableLockScreenTodayView</string>

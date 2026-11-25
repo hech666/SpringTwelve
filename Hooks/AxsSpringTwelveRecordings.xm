@@ -822,6 +822,12 @@ static NSArray<UIViewController *> *AxsSpringTwelveRecordingTabs(UITabBarControl
     state.axs_springtwelve_entries = next;
     return [tabs isEqualToArray:incoming] ? incoming : (incoming ? tabs : nil);
 }
+static void AxsSpringTwelveSelectRecordingController(UITabBarController *owner, UIViewController *controller) {
+    SEL selector = @selector(setSelectedViewController:);
+    IMP implementation = class_getMethodImplementation(UITabBarController.class, selector);
+    ((void (*)(id, SEL, UIViewController *))implementation)(owner, selector, controller);
+}
+
 static void AxsSpringTwelveSetRecordingTabs(UITabBarController *owner, NSArray<UIViewController *> *incoming,
                                            void (^apply)(NSArray<UIViewController *> *)) {
     if (!NSThread.isMainThread) { apply(incoming); return; }
@@ -894,12 +900,14 @@ static void AxsSpringTwelveRefreshRecordingTabs(UITabBarController *owner) {
 - (void)setSelectedViewController:(UIViewController *)controller {
     AxsSpringTwelveRecordingTabState *state = objc_getAssociatedObject(self, &AxsSpringTwelveRecordingTabStateKey);
     if (NSThread.isMainThread && state) {
-        UIViewController *resolved = AxsSpringTwelveRecordingResolve(controller, state.axs_springtwelve_entries,
-                                                                    state.axs_springtwelve_entries);
-        if (resolved != controller) {
-            if ([self.viewControllers containsObject:resolved]) { %orig(resolved); }
-            else if (state.axs_springtwelve_applying) state.axs_springtwelve_pendingSelection = resolved;
-            return; // Including reentrant selections of a cached native target during array installation.
+        AxsSpringTwelveRecordingTabEntry *entry = AxsSpringTwelveRecordingEntry(state.axs_springtwelve_entries, controller);
+        if (entry) {
+            UIViewController *replacement = entry.axs_springtwelve_replacement;
+            if ([self.viewControllers containsObject:replacement])
+                AxsSpringTwelveSelectRecordingController(self, replacement);
+            else if (state.axs_springtwelve_applying)
+                state.axs_springtwelve_pendingSelection = replacement;
+            return; // Phone's setter only accepts its own native tab controllers.
         }
         if (controller && ![self.viewControllers containsObject:controller] &&
             AxsSpringTwelveRecordingTabDisabled(AxsSpringTwelveRecordingRole(controller, 0))) return;
