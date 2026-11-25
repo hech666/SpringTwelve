@@ -52,7 +52,10 @@ with tempfile.TemporaryDirectory(prefix='st-power-verify-') as tmp:
     import tarfile, io, shutil
     payload = subprocess.check_output(['dpkg-deb', '--fsys-tarfile', str(package)])
     with tarfile.open(fileobj=io.BytesIO(payload)) as archive:
-        entries = [e for e in archive.getmembers() if e.name.endswith('/usr/local/libexec/AxsSpringTwelvePowerHelper')]
+        allowed_paths = {'usr/local/libexec/AxsSpringTwelvePowerHelper',
+                         'var/jb/usr/local/libexec/AxsSpringTwelvePowerHelper'}
+        entries = [e for e in archive.getmembers()
+                   if e.name.removeprefix('./').lstrip('/') in allowed_paths]
         assert len(entries) == 1
         entry = entries[0]
         assert entry.isfile() and entry.uid == 0 and entry.gid == 0
