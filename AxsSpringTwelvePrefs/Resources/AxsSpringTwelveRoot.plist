@@ -196,7 +196,7 @@
 			<key>label</key>
 			<string>SpringTwelve 通话工具</string>
 			<key>footerText</key>
-			<string>录音功能需遵守当地法律，并在获得通话参与者同意后使用。仅在通话界面手动操作，不提供隐蔽录音。</string>
+			<string>录音功能需遵守当地法律并确保已取得通话参与者同意。启用自动录音后，系统在蜂窝通话接通时开始采集，屏幕会持续显示红色“录音中”提示；挂断后停止并整理文件。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -225,6 +225,20 @@
 			<false/>
 			<key>footerText</key>
 			<string>启用后在电话拨号界面按数字前缀匹配联系人；不会主动请求授权，若系统限制访问则无法匹配。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>蜂窝通话接通自动录音</string>
+			<key>key</key>
+			<string>callRecordingEnabled</string>
+			<key>defaults</key>
+			<string>com.axs.springtwelve</string>
+			<key>default</key>
+			<false/>
+			<key>footerText</key>
+			<string>默认关闭。仅在开关开启且蜂窝通话接通后启动；录音中显示红色提示，挂断后保存到录音列表。请先取得参与者同意。</string>
 		</dict>
 		<dict>
 			<key>cell</key>

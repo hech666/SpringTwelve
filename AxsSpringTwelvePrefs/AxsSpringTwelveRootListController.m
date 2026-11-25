@@ -56,7 +56,7 @@
 
 - (void)axs_springtwelve_openRecordings:(id)sender {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"通话录音"
-        message:@"录音列表入口会在电话 App 中由启用的 SpringTwelve 模块提供。当前版本不会自动录音。"
+        message:@"录音列表入口会在电话 App 中由启用的 SpringTwelve 模块提供。自动录音由“蜂窝通话接通自动录音”开关控制，默认关闭。"
         preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"打开录音目录" style:UIAlertActionStyleDefault
         handler:^(__unused UIAlertAction *action) { [self axs_springtwelve_openRecordingsFolder:sender]; }]];

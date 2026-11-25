@@ -26,6 +26,7 @@
 @end
 
 static NSString * const AxsSpringTwelveRecordingsChanged = @"com.axs.springtwelve.preferences-changed";
+static NSString * const AxsSpringTwelveRecordingStateChanged = @"com.axs.springtwelve.call-recording-state";
 static NSURL *AxsSpringTwelveRecordingsURL(void) {
     // Documents is user data, not a rootless installation resource.
     NSString *path = @"/var/mobile/Documents/CallRecordings";
@@ -284,6 +285,7 @@ static BOOL AxsSpringTwelveDeleteRecording(AxsSpringTwelveRecording *record, NSE
     ]];
     NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
     [center addObserver:self selector:@selector(axs_springtwelve_preferencesChanged:) name:AxsSpringTwelveRecordingsChanged object:nil];
+    [center addObserver:self selector:@selector(axs_springtwelve_preferencesChanged:) name:AxsSpringTwelveRecordingStateChanged object:nil];
     [center addObserver:self selector:@selector(axs_springtwelve_suspend:) name:UIApplicationWillResignActiveNotification object:nil];
     [center addObserver:self selector:@selector(axs_springtwelve_preferencesChanged:) name:UIApplicationDidBecomeActiveNotification object:nil];
     // Do not change the host Phone process's shared audio category, route, or activation state.
@@ -351,7 +353,7 @@ static BOOL AxsSpringTwelveDeleteRecording(AxsSpringTwelveRecording *record, NSE
     _axs_springtwelve_filtered = filtered;
     if (!AxsSpringTwelveOn(@"callRecordingListEnabled")) _axs_springtwelve_empty.text = @"录音列表已关闭";
     else if (_axs_springtwelve_indexError.length) _axs_springtwelve_empty.text = [@"无法读取录音目录：\n" stringByAppendingString:_axs_springtwelve_indexError];
-    else _axs_springtwelve_empty.text = query.length ? @"没有匹配的录音" : @"暂无 SpringTwelve 录音\n仅管理本插件命名的音频文件；不会自动录音或导入其他录音。";
+    else _axs_springtwelve_empty.text = query.length ? @"没有匹配的录音" : @"暂无 SpringTwelve 录音\n开启自动录音后，仅管理本插件生成的音频文件。";
     _axs_springtwelve_empty.hidden = filtered.count != 0;
     [_axs_springtwelve_table reloadData];
 }

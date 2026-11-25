@@ -47,6 +47,16 @@ jobs:
           xcrun lipo "$DYLIB" -verify_arch arm64e
           xcrun lipo "$DYLIB" -archs
           test "$(find "$RUNNER_TEMP/deb-root" -name '*.dylib' | wc -l | tr -d ' ')" = "1"
+          HELPER_RECORD=$(find "$RUNNER_TEMP/deb-root" -path '*/usr/local/bin/MUtoolRecord' -type f -print -quit)
+          HELPER_MIXER=$(find "$RUNNER_TEMP/deb-root" -path '*/usr/local/bin/MUtoolMixer' -type f -print -quit)
+          test -n "$HELPER_RECORD" -a -n "$HELPER_MIXER"
+          test -x "$HELPER_RECORD" -a -x "$HELPER_MIXER"
+          xcrun lipo "$HELPER_RECORD" -verify_arch arm64e
+          xcrun lipo "$HELPER_MIXER" -verify_arch arm64e
+          test "$(shasum -a 256 "$HELPER_RECORD" | cut -d ' ' -f 1)" = "f00d1331cd5c820432ba23fd3616cbc836f2e4b84df6ce2c3babc58381b0baea"
+          test "$(shasum -a 256 "$HELPER_MIXER" | cut -d ' ' -f 1)" = "368d638ffdc2724431be66fbb8586a2d0521a1bef70c54b1731b9b891278fa60"
+          ldid -e "$HELPER_RECORD" | rg -q 'com.apple.coreaudio.CanTapTelephony'
+          ldid -e "$HELPER_RECORD" | rg -q 'com.apple.coreaudio.private.SystemWideTap'
           test -f "$RUNNER_TEMP/deb-root/var/jb/Library/PreferenceBundles/AxsSpringTwelvePrefs.bundle/Info.plist" -o -f "$RUNNER_TEMP/deb-root/Library/PreferenceBundles/AxsSpringTwelvePrefs.bundle/Info.plist"
       - uses: actions/upload-artifact@v4
         with:
