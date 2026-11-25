@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+# RootHide bootstrap tools consume jbroot-based logical paths.
+# Only set ownership/mode; never execute a power action during installation.
+case "${1:-}" in
+    configure)
+        helper=/usr/local/libexec/AxsSpringTwelvePowerHelper
+        if [ ! -f "$helper" ] || [ -L "$helper" ]; then
+            echo "AxsSpringTwelvePowerHelper missing or symlinked" >&2
+            exit 1
+        fi
+        chown root:wheel "$helper"
+        chmod 4755 "$helper"
+        ;;
+esac
+exit 0

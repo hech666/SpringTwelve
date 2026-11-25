@@ -58,6 +58,7 @@ jobs:
           ldid -e "$HELPER_RECORD" | grep -q 'com.apple.coreaudio.CanTapTelephony'
           ldid -e "$HELPER_RECORD" | grep -q 'com.apple.coreaudio.private.SystemWideTap'
           test -f "$RUNNER_TEMP/deb-root/var/jb/Library/PreferenceBundles/AxsSpringTwelvePrefs.bundle/Info.plist" -o -f "$RUNNER_TEMP/deb-root/Library/PreferenceBundles/AxsSpringTwelvePrefs.bundle/Info.plist"
+          python3 scripts/verify-power-package.py "$DEB"
       - uses: actions/upload-artifact@v4
         with:
           name: SpringTwelve-Roothide-${{ github.run_number }}

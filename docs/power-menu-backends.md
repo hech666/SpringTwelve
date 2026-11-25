@@ -1,0 +1,31 @@
+# 电源操作后端与权限边界
+
+仅由前台 SpringBoard 内的同窗口中文确认卡发出请求；取消、窗口失焦、离开前台或关闭菜单同步撤销一次性令牌。没有模态控制器的解散时序依赖，没有后台自动执行、任意命令或破坏性 fallback。
+
+| 动作 | 后端 |
+|---|---|
+| 快速注销 | 当前 SpringBoard 对自身 `kill(getpid(), SIGTERM)` |
+| 强制注销 | 当前 SpringBoard 对自身 `kill(getpid(), SIGKILL)` |
+| 请求安全模式 | 当前 SpringBoard 对自身 `kill(getpid(), SIGSEGV)`；越狱处理器决定是否进入安全模式 |
+| 重启桌面 | `SBSRelaunchAction actionWithReason:@"RestartRenderServer" options:4 targetURL:nil` → `FBSSystemService sendActions:withResult:` |
+| 重启用户空间 | 专用 setuid root `AxsSpringTwelvePowerHelper userspace-reboot` → `reboot3(0x2000000000000000ULL)` |
+| 重启设备 | `FBSSystemService reboot` |
+| 关机 | `FBSSystemService shutdown` |
+
+## 原生服务
+
+显式加载系统原始路径下的 SpringBoardServices / FrontBoardServices，逐项检查类、selector、参数数量、返回与参数类型；不依赖固定地址或手动去 PAC。
+
+重启桌面的参数照用 [Cephei HBRespringController](https://github.com/hbang/cephei/blob/main/main/HBRespringController.m) 的实际 `FadeToBlackTransition = 4`，不猜其他 flags。`reboot`/`shutdown` 返回 void，日志只表示请求提交，不保证设备已经执行；没有改用硬件重启或杀 backboardd 的 fallback。
+
+## 用户空间重启工具
+
+ABI/flags 来自 [RootHide Dopamine jbctl](https://github.com/roothide/Dopamine/blob/2.x/BaseBin/jbctl/src/main.m)。只复用其明确的 reboot3 调用，不复用原 MUtool 多用途 helper，也不删除系统状态文件或执行 shell/launchctl 等额外后备动作。
+
+工具只接受固定参数，要求 real uid 501、effective uid 0，核对父进程真实可执行路径为系统 SpringBoard；再次校验父 PID 后才调用唯一动作。提权与身份校验失败立即退出。签名只含 platform/no-sandbox 和 userspace-reboot 两项授权，不给 tweak dylib 虚加 entitlement。
+
+父进程以固定路径、固定参数、白名单环境 spawn；关闭其他继承描述符，标准流接 `/dev/null`，后台等待并回收。10 秒未返回时报告仍在处理、禁止重复提交，继续负责回收，不自动换用更强操作。
+
+包验证要求工具真实现代 arm64e、root:wheel 所有者、setuid 且不可被组/其他用户写入、正确签名权限和所有代码页哈希。RootHide 具体签名/提权策略和最终重启效果仍需用户真机测试；接口存在、编译成功、请求返回均不能冒充实机验收。
+
+自动录音源码、路径、列表及两个原版采集/混音工具相对已验收的 `f583596` 不变。

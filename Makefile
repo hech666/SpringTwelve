@@ -17,5 +17,5 @@ endif
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
-SUBPROJECTS += AxsSpringTwelvePrefs
+SUBPROJECTS += AxsSpringTwelvePrefs PowerHelper
 include $(THEOS_MAKE_PATH)/aggregate.mk
