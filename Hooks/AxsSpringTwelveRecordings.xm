@@ -28,8 +28,8 @@
 static NSString * const AxsSpringTwelveRecordingsChanged = @"com.axs.springtwelve.preferences-changed";
 static NSString * const AxsSpringTwelveRecordingStateChanged = @"com.axs.springtwelve.call-recording-state";
 static NSURL *AxsSpringTwelveRecordingsURL(void) {
-    // Documents is user data, not a rootless installation resource.
-    NSString *path = @"/var/mobile/Documents/CallRecordings";
+    // Shared user-data path: Roothide resolves jbroot; Rootful/Rootless stay unprefixed.
+    NSString *path = axs_springtwelve_recordingDirectory();
     return path.isAbsolutePath ? [NSURL fileURLWithPath:path isDirectory:YES] : nil;
 }
 static BOOL AxsSpringTwelveOwnedRecordingName(NSString *name) {

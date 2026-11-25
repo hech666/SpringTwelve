@@ -1,5 +1,8 @@
 #import <UIKit/UIKit.h>
 #import <CoreFoundation/CoreFoundation.h>
+#import <CoreTelephony/CTCallCenter.h>
+#import <CoreTelephony/CTCall.h>
+#import <AVFoundation/AVFoundation.h>
 #import <dlfcn.h>
 #import <errno.h>
 #import <signal.h>
@@ -20,7 +23,41 @@ typedef CFNotificationCenterRef (*AxsSpringTwelveCTGetDefault)(void);
 typedef void (*AxsSpringTwelveCTAddObserver)(CFNotificationCenterRef, const void *, AxsSpringTwelveCTCallback,
                                                CFStringRef, const void *, CFNotificationSuspensionBehavior);
 
-static NSString * const AxsSpringTwelveRecordingDirectory = @"/var/mobile/Documents/CallRecordings";
+// Deprecated public cellular API is retained only as a second event source on
+// supported iOS 15/16 devices; this deliberately does not enable VoIP capture.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
+static void AxsSpringTwelveRecordLog(NSString *format, ...) NS_FORMAT_FUNCTION(1, 2);
+static void AxsSpringTwelveRecordLog(NSString *format, ...) {
+    va_list args;
+    va_start(args, format);
+    NSString *message = [[NSString alloc] initWithFormat:format arguments:args];
+    va_end(args);
+    NSLog(@"%@ %@", @"[SpringTwelve:Record]", message);
+    @synchronized (NSFileManager.class) {
+        NSString *directory = [axs_springtwelve_recordingDirectory() stringByAppendingPathComponent:@"Diagnostics"];
+        NSFileManager *manager = NSFileManager.defaultManager;
+        if (![manager createDirectoryAtPath:directory withIntermediateDirectories:YES
+                                attributes:@{NSFilePosixPermissions: @0700} error:NULL]) return;
+        NSString *path = [directory stringByAppendingPathComponent:@"AxsSpringTwelve-recording.log"];
+        NSDictionary *attributes = [manager attributesOfItemAtPath:path error:NULL];
+        if ([attributes[NSFileSize] unsignedLongLongValue] > 65536) {
+            NSString *previous = [path stringByAppendingString:@".previous"];
+            [manager removeItemAtPath:previous error:NULL];
+            [manager moveItemAtPath:path toPath:previous error:NULL];
+        }
+        if (![manager fileExistsAtPath:path]) [manager createFileAtPath:path contents:nil attributes:@{NSFilePosixPermissions: @0600}];
+        NSFileHandle *file = [NSFileHandle fileHandleForWritingAtPath:path];
+        @try {
+            [file seekToEndOfFile];
+            NSString *line = [NSString stringWithFormat:@"%.3f %@\n", NSDate.date.timeIntervalSince1970, message];
+            [file writeData:[line dataUsingEncoding:NSUTF8StringEncoding]];
+            [file closeFile];
+        } @catch (__unused NSException *exception) { [file closeFile]; }
+    }
+}
+
 extern char **environ;
 static NSString * const AxsSpringTwelveRecordingStateChanged = @"com.axs.springtwelve.call-recording-state";
 static CFStringRef AxsSpringTwelveCallStatusNotification;
@@ -30,6 +67,7 @@ static CFStringRef AxsSpringTwelveCallIdentificationNotification;
 @property(nonatomic, strong) UIWindow *axs_springtwelve_window;
 @property(nonatomic, strong) UILabel *axs_springtwelve_label;
 @property(nonatomic, strong) NSTimer *axs_springtwelve_hideTimer;
+@property(nonatomic) NSUInteger axs_springtwelve_textVersion;
 - (void)axs_springtwelve_showRecording;
 - (void)axs_springtwelve_showSaved;
 - (void)axs_springtwelve_showFailure:(NSString *)reason;
@@ -41,7 +79,16 @@ static CFStringRef AxsSpringTwelveCallIdentificationNotification;
     if (self.axs_springtwelve_window) return;
     CGRect screen = UIScreen.mainScreen.bounds;
     CGFloat width = MIN(142.0, MAX(116.0, screen.size.width - 24.0));
-    UIWindow *window = [[UIWindow alloc] initWithFrame:CGRectMake(screen.size.width - width - 8.0, 5.0, width, 30.0)];
+    CGRect frame = CGRectMake(screen.size.width - width - 8.0, 5.0, width, 30.0);
+    UIWindowScene *targetScene = nil;
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if ([scene isKindOfClass:UIWindowScene.class] && scene.activationState == UISceneActivationStateForegroundActive) {
+            targetScene = (UIWindowScene *)scene;
+            break;
+        }
+    }
+    UIWindow *window = targetScene ? [[UIWindow alloc] initWithWindowScene:targetScene] : [[UIWindow alloc] initWithFrame:frame];
+    window.frame = frame;
     window.windowLevel = UIWindowLevelStatusBar + 2.0;
     window.backgroundColor = [UIColor clearColor];
     window.userInteractionEnabled = NO;
@@ -68,6 +115,8 @@ static CFStringRef AxsSpringTwelveCallIdentificationNotification;
     }
     [self.axs_springtwelve_hideTimer invalidate];
     [self axs_springtwelve_ensureWindow];
+    NSUInteger textVersion = ++self.axs_springtwelve_textVersion;
+    [self.axs_springtwelve_window.layer removeAllAnimations];
     self.axs_springtwelve_label.text = text;
     self.axs_springtwelve_label.backgroundColor = color;
     self.axs_springtwelve_window.hidden = NO;
@@ -75,8 +124,11 @@ static CFStringRef AxsSpringTwelveCallIdentificationNotification;
     if (delay > 0.0) {
         __weak typeof(self) weakSelf = self;
         self.axs_springtwelve_hideTimer = [NSTimer scheduledTimerWithTimeInterval:delay repeats:NO block:^(__unused NSTimer *timer) {
+            if (weakSelf.axs_springtwelve_textVersion != textVersion) return;
             [UIView animateWithDuration:0.25 animations:^{ weakSelf.axs_springtwelve_window.alpha = 0.0; }
-                             completion:^(__unused BOOL finished) { weakSelf.axs_springtwelve_window.hidden = YES; }];
+                             completion:^(__unused BOOL finished) {
+                if (weakSelf.axs_springtwelve_textVersion == textVersion) weakSelf.axs_springtwelve_window.hidden = YES;
+            }];
         }];
     }
 }
@@ -93,18 +145,56 @@ static CFStringRef AxsSpringTwelveCallIdentificationNotification;
 }
 @end
 
+// Signal and waitpid share one lock, so a reaped PID can never be signalled
+// after the kernel has recycled it. Escalation runs even after UI state clears.
+@interface AxsSpringTwelveRecordingWorker : NSObject
+@property(nonatomic) pid_t axs_springtwelve_pid;
+@property(nonatomic) NSTimeInterval axs_springtwelve_stopTime;
+- (void)axs_springtwelve_requestStop;
+- (int)axs_springtwelve_wait:(pid_t *)result;
+@end
+@implementation AxsSpringTwelveRecordingWorker
+- (void)axs_springtwelve_requestStop {
+    @synchronized (self) {
+        if (self.axs_springtwelve_pid <= 0 || self.axs_springtwelve_stopTime > 0) return;
+        self.axs_springtwelve_stopTime = NSProcessInfo.processInfo.systemUptime;
+        kill(self.axs_springtwelve_pid, SIGINT);
+    }
+}
+- (int)axs_springtwelve_wait:(pid_t *)result {
+    int status = 0;
+    BOOL sentTerm = NO, sentKill = NO;
+    for (;;) {
+        @synchronized (self) {
+            pid_t pid = self.axs_springtwelve_pid;
+            pid_t value = waitpid(pid, &status, WNOHANG);
+            if (value == pid || (value < 0 && errno != EINTR)) {
+                self.axs_springtwelve_pid = 0;
+                if (result) *result = value;
+                return status;
+            }
+            NSTimeInterval age = self.axs_springtwelve_stopTime > 0 ? NSProcessInfo.processInfo.systemUptime - self.axs_springtwelve_stopTime : 0;
+            if (age > 3.0 && !sentTerm) { kill(pid, SIGTERM); sentTerm = YES; }
+            if (age > 5.0 && !sentKill) { kill(pid, SIGKILL); sentKill = YES; }
+        }
+        usleep(100000);
+    }
+}
+@end
+
 @interface AxsSpringTwelveCallRecorder : NSObject {
 @public
     dispatch_queue_t _axs_springtwelve_queue;
     dispatch_group_t _axs_springtwelve_waitGroup;
-    pid_t _axs_springtwelve_speakerPID;
-    pid_t _axs_springtwelve_micPID;
+    AxsSpringTwelveRecordingWorker *_axs_springtwelve_speakerWorker;
+    AxsSpringTwelveRecordingWorker *_axs_springtwelve_micWorker;
     NSString *_axs_springtwelve_downstreamPath;
     NSString *_axs_springtwelve_upstreamPath;
     NSString *_axs_springtwelve_outputPath;
     NSUInteger _axs_springtwelve_generation;
     BOOL _axs_springtwelve_active;
     AxsSpringTwelveRecordingIndicator *_axs_springtwelve_indicator;
+    CTCallCenter *_axs_springtwelve_cellularCenter;
 }
 + (instancetype)axs_springtwelve_shared;
 - (void)axs_springtwelve_installTelephonyObserver;
@@ -119,21 +209,21 @@ static CFStringRef AxsSpringTwelveCallIdentificationNotification;
 static void AxsSpringTwelveCallNotification(CFNotificationCenterRef center, void *observer,
                                              CFStringRef name, const void *object, CFDictionaryRef userInfo);
 
-static void AxsSpringTwelveRecordChild(AxsSpringTwelveCallRecorder *recorder, pid_t pid,
+static void AxsSpringTwelveRecordChild(AxsSpringTwelveCallRecorder *recorder, AxsSpringTwelveRecordingWorker *worker,
                                        dispatch_group_t group, NSUInteger generation, NSString *label) {
     dispatch_group_enter(group);
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        int status = 0;
-        pid_t result;
-        do { result = waitpid(pid, &status, 0); } while (result < 0 && errno == EINTR);
+        pid_t originalPID = worker.axs_springtwelve_pid;
+        pid_t result = 0;
+        int status = [worker axs_springtwelve_wait:&result];
         dispatch_group_leave(group);
         dispatch_async(recorder->_axs_springtwelve_queue, ^{
             if (generation != recorder->_axs_springtwelve_generation) return;
-            if (pid == recorder->_axs_springtwelve_speakerPID) recorder->_axs_springtwelve_speakerPID = 0;
-            if (pid == recorder->_axs_springtwelve_micPID) recorder->_axs_springtwelve_micPID = 0;
-            BOOL exitedCleanly = result == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
-            if (!exitedCleanly) {
-                NSLog(@"[SpringTwelve:Record] %@ helper exited unexpectedly", label);
+            BOOL exitedCleanly = result == originalPID && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+            if (!exitedCleanly || recorder->_axs_springtwelve_active) {
+                AxsSpringTwelveRecordLog(@"%@ worker result=%d exit=%d signal=%d active=%d", label,
+                    (int)result, WIFEXITED(status) ? WEXITSTATUS(status) : -1,
+                    WIFSIGNALED(status) ? WTERMSIG(status) : 0, recorder->_axs_springtwelve_active);
                 [recorder axs_springtwelve_abortLockedWithReason:@"采集进程异常" generation:generation];
             }
         });
@@ -160,7 +250,9 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
     }
     for (NSUInteger i = 0; i < argvStrings.count; i++) argv[i] = (char *)argvStrings[i].fileSystemRepresentation;
     pid_t pid = 0;
-    int error = posix_spawn(&pid, path.fileSystemRepresentation, NULL, NULL, argv, environ);
+    // Match the original coordinator: do not inherit SpringBoard's injection
+    // environment into the entitled standalone audio worker.
+    int error = posix_spawn(&pid, path.fileSystemRepresentation, NULL, NULL, argv, NULL);
     free(argv);
     if (errorOut) *errorOut = error;
     if (error != 0) return NO;
@@ -199,6 +291,26 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
 - (void)axs_springtwelve_installTelephonyObserver {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
+        _axs_springtwelve_cellularCenter = [CTCallCenter new];
+        __weak typeof(self) weakSelf = self;
+        _axs_springtwelve_cellularCenter.callEventHandler = ^(CTCall *call) {
+            AxsSpringTwelveCallRecorder *recorder = weakSelf;
+            if (!recorder) return;
+            NSString *state = call.callState;
+            // No callID, phone number, address or contact details are logged.
+            BOOL connected = [state isEqualToString:CTCallStateConnected];
+            BOOL ended = [state isEqualToString:CTCallStateDisconnected];
+            AxsSpringTwelveRecordLog(@"cellular event connected=%d ended=%d", connected, ended);
+            if (connected) [recorder axs_springtwelve_handleCallStatus:1];
+            else if (ended) {
+                BOOL otherConnected = NO;
+                for (CTCall *current in recorder->_axs_springtwelve_cellularCenter.currentCalls) {
+                    if ([current.callState isEqualToString:CTCallStateConnected]) { otherConnected = YES; break; }
+                }
+                if (!otherConnected) [recorder axs_springtwelve_handleCallStatus:5];
+            }
+        };
+        AxsSpringTwelveRecordLog(@"module loaded; cellular fallback installed; enabled=%d", AxsSpringTwelveOn(@"callRecordingEnabled"));
         void *handle = dlopen("/System/Library/Frameworks/CoreTelephony.framework/CoreTelephony", RTLD_LAZY | RTLD_LOCAL);
         AxsSpringTwelveCTGetDefault getDefault = handle ? (AxsSpringTwelveCTGetDefault)dlsym(handle, "CTTelephonyCenterGetDefault") : NULL;
         AxsSpringTwelveCTAddObserver addObserver = handle ? (AxsSpringTwelveCTAddObserver)dlsym(handle, "CTTelephonyCenterAddObserver") : NULL;
@@ -207,7 +319,7 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
         AxsSpringTwelveCallStatusNotification = statusName ? *statusName : NULL;
         AxsSpringTwelveCallIdentificationNotification = identificationName ? *identificationName : NULL;
         if (!getDefault || !addObserver || !AxsSpringTwelveCallStatusNotification) {
-            NSLog(@"[SpringTwelve:Record] CoreTelephony observer unavailable");
+            AxsSpringTwelveRecordLog(@"CoreTelephony observer unavailable");
             return;
         }
         CFNotificationCenterRef center = getDefault();
@@ -216,37 +328,50 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
         if (AxsSpringTwelveCallIdentificationNotification)
             addObserver(center, NULL, (AxsSpringTwelveCTCallback)AxsSpringTwelveCallNotification,
                         AxsSpringTwelveCallIdentificationNotification, NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        NSLog(@"[SpringTwelve:Record] CoreTelephony observer installed");
+        AxsSpringTwelveRecordLog(@"CoreTelephony observer installed");
     });
 }
 
 - (void)axs_springtwelve_handleCallStatus:(int)status {
+    AxsSpringTwelveRecordLog(@"telephony status=%d", status);
     dispatch_async(_axs_springtwelve_queue, ^{
         if (status == 1) {
             [self axs_springtwelve_startLocked];
         } else if (status == 2 || status == 5) {
+            // A rejected second call must not stop an already connected call.
+            for (CTCall *current in self->_axs_springtwelve_cellularCenter.currentCalls) {
+                if ([current.callState isEqualToString:CTCallStateConnected]) {
+                    AxsSpringTwelveRecordLog(@"end deferred: cellular call still connected");
+                    return;
+                }
+            }
             [self axs_springtwelve_stopLockedWithReason:nil];
         }
     });
 }
 
 - (void)axs_springtwelve_startLocked {
-    if (_axs_springtwelve_active || !AxsSpringTwelveOn(@"callRecordingEnabled")) return;
+    if (_axs_springtwelve_active) return;
+    if (!AxsSpringTwelveOn(@"callRecordingEnabled")) {
+        AxsSpringTwelveRecordLog(@"start skipped: switch disabled");
+        return;
+    }
+    AxsSpringTwelveRecordLog(@"start requested");
     NSString *recordHelper = AxsSpringTwelveResolveHelper(@"MUtoolRecord");
     NSString *mixerHelper = AxsSpringTwelveResolveHelper(@"MUtoolMixer");
     if (!recordHelper || !mixerHelper) {
-        NSLog(@"[SpringTwelve:Record] helper missing");
+        AxsSpringTwelveRecordLog(@"helper missing");
         dispatch_async(dispatch_get_main_queue(), ^{ [self->_axs_springtwelve_indicator axs_springtwelve_showFailure:@"组件缺失"]; });
         return;
     }
     NSFileManager *manager = NSFileManager.defaultManager;
-    if (![manager createDirectoryAtPath:AxsSpringTwelveRecordingDirectory withIntermediateDirectories:YES
+    if (![manager createDirectoryAtPath:axs_springtwelve_recordingDirectory() withIntermediateDirectories:YES
                              attributes:@{NSFilePosixPermissions: @0700} error:NULL]) {
-        NSLog(@"[SpringTwelve:Record] unable to create recording directory");
+        AxsSpringTwelveRecordLog(@"unable to create recording directory");
         dispatch_async(dispatch_get_main_queue(), ^{ [self->_axs_springtwelve_indicator axs_springtwelve_showFailure:@"目录不可写"]; });
         return;
     }
-    NSString *base = [AxsSpringTwelveRecordingDirectory stringByAppendingPathComponent:
+    NSString *base = [axs_springtwelve_recordingDirectory() stringByAppendingPathComponent:
                       [NSString stringWithFormat:@"AxsSpringTwelve-%@", NSUUID.UUID.UUIDString]];
     _axs_springtwelve_downstreamPath = [base stringByAppendingString:@"-downstream.caf"];
     _axs_springtwelve_upstreamPath = [base stringByAppendingString:@"-upstream.caf"];
@@ -258,30 +383,52 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
     pid_t speaker = 0, mic = 0;
     BOOL speakerOK = AxsSpringTwelveSpawn(recordHelper, @[@"speaker", _axs_springtwelve_downstreamPath], &speaker, &error);
     if (!speakerOK) {
-        NSLog(@"[SpringTwelve:Record] speaker helper spawn failed: %d", error);
+        AxsSpringTwelveRecordLog(@"speaker helper spawn failed: %d", error);
         [self axs_springtwelve_failStartLocked];
         return;
     }
+    _axs_springtwelve_speakerWorker = [AxsSpringTwelveRecordingWorker new];
+    _axs_springtwelve_speakerWorker.axs_springtwelve_pid = speaker;
+    AxsSpringTwelveRecordChild(self, _axs_springtwelve_speakerWorker, _axs_springtwelve_waitGroup, generation, @"speaker");
     BOOL micOK = AxsSpringTwelveSpawn(recordHelper, @[@"mic", _axs_springtwelve_upstreamPath], &mic, &error);
     if (!micOK) {
-        kill(speaker, SIGINT);
-        NSLog(@"[SpringTwelve:Record] mic helper spawn failed: %d", error);
+        [_axs_springtwelve_speakerWorker axs_springtwelve_requestStop];
+        AxsSpringTwelveRecordLog(@"mic helper spawn failed: %d", error);
         [self axs_springtwelve_failStartLocked];
         return;
     }
-    _axs_springtwelve_speakerPID = speaker;
-    _axs_springtwelve_micPID = mic;
+    _axs_springtwelve_micWorker = [AxsSpringTwelveRecordingWorker new];
+    _axs_springtwelve_micWorker.axs_springtwelve_pid = mic;
     _axs_springtwelve_active = YES;
-    AxsSpringTwelveRecordChild(self, speaker, _axs_springtwelve_waitGroup, generation, @"speaker");
-    AxsSpringTwelveRecordChild(self, mic, _axs_springtwelve_waitGroup, generation, @"mic");
-    NSLog(@"[SpringTwelve:Record] recording started");
-    dispatch_async(dispatch_get_main_queue(), ^{ [self->_axs_springtwelve_indicator axs_springtwelve_showRecording]; });
+    AxsSpringTwelveRecordChild(self, _axs_springtwelve_micWorker, _axs_springtwelve_waitGroup, generation, @"mic");
+    AxsSpringTwelveRecordLog(@"capture workers spawned");
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self->_axs_springtwelve_indicator axs_springtwelve_showText:@"正在启动录音" color:[UIColor colorWithWhite:0.12 alpha:0.94] hideAfter:0.0];
+    });
+    // Spawn success alone is not evidence of audio capture. Require data in
+    // both channel files before showing the recording indicator.
+    for (NSUInteger attempt = 1; attempt <= 3; attempt++) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(attempt * 2 * NSEC_PER_SEC)), _axs_springtwelve_queue, ^{
+            if (generation != self->_axs_springtwelve_generation || !self->_axs_springtwelve_active) return;
+            struct stat down = {}, up = {};
+            BOOL hasData = stat(self->_axs_springtwelve_downstreamPath.fileSystemRepresentation, &down) == 0 &&
+                           stat(self->_axs_springtwelve_upstreamPath.fileSystemRepresentation, &up) == 0 &&
+                           down.st_size > 128 && up.st_size > 128;
+            AxsSpringTwelveRecordLog(@"capture probe=%lu downBytes=%lld upBytes=%lld", (unsigned long)attempt,
+                                    (long long)down.st_size, (long long)up.st_size);
+            if (hasData) {
+                dispatch_async(dispatch_get_main_queue(), ^{ [self->_axs_springtwelve_indicator axs_springtwelve_showRecording]; });
+            } else if (attempt == 3) {
+                [self axs_springtwelve_abortLockedWithReason:@"未采集到音频" generation:generation];
+            }
+        });
+    }
 }
 
 - (void)axs_springtwelve_failStartLocked {
     _axs_springtwelve_active = NO;
-    _axs_springtwelve_speakerPID = 0;
-    _axs_springtwelve_micPID = 0;
+    _axs_springtwelve_speakerWorker = nil;
+    _axs_springtwelve_micWorker = nil;
     _axs_springtwelve_waitGroup = nil;
     _axs_springtwelve_downstreamPath = nil;
     _axs_springtwelve_upstreamPath = nil;
@@ -292,25 +439,25 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
 - (void)axs_springtwelve_stopLockedWithReason:(NSString *)reason {
     if (!_axs_springtwelve_active) return;
     _axs_springtwelve_active = NO;
-    pid_t speaker = _axs_springtwelve_speakerPID;
-    pid_t mic = _axs_springtwelve_micPID;
-    _axs_springtwelve_speakerPID = 0;
-    _axs_springtwelve_micPID = 0;
+    AxsSpringTwelveRecordingWorker *speaker = _axs_springtwelve_speakerWorker;
+    AxsSpringTwelveRecordingWorker *mic = _axs_springtwelve_micWorker;
+    _axs_springtwelve_speakerWorker = nil;
+    _axs_springtwelve_micWorker = nil;
     NSString *downstream = [_axs_springtwelve_downstreamPath copy];
     NSString *upstream = [_axs_springtwelve_upstreamPath copy];
     NSString *output = [_axs_springtwelve_outputPath copy];
     NSString *mixer = AxsSpringTwelveResolveHelper(@"MUtoolMixer");
     dispatch_group_t group = _axs_springtwelve_waitGroup;
     NSUInteger generation = _axs_springtwelve_generation;
-    if (speaker > 0) kill(speaker, SIGINT);
-    if (mic > 0) kill(mic, SIGINT);
-    NSLog(@"[SpringTwelve:Record] recording stopped%@", reason.length ? [@" (" stringByAppendingFormat:@"%@)", reason] : @"");
+    [speaker axs_springtwelve_requestStop];
+    [mic axs_springtwelve_requestStop];
+    AxsSpringTwelveRecordLog(@"recording stopped%@", reason.length ? [@" (" stringByAppendingFormat:@"%@)", reason] : @"");
     dispatch_async(dispatch_get_main_queue(), ^{ [self->_axs_springtwelve_indicator axs_springtwelve_showText:@"正在整理录音" color:[UIColor colorWithWhite:0.12 alpha:0.94] hideAfter:0.0]; });
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         long waitResult = group ? dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 10 * NSEC_PER_SEC)) : 0;
         if (waitResult != 0) {
             if (output.length) unlink(output.fileSystemRepresentation);
-            NSLog(@"[SpringTwelve:Record] capture workers did not stop in time");
+            AxsSpringTwelveRecordLog(@"capture workers did not stop in time");
             dispatch_async(self->_axs_springtwelve_queue, ^{
                 [self axs_springtwelve_finishFailure:@"结束超时" generation:generation];
             });
@@ -331,7 +478,7 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
     int error = 0;
     pid_t mixerPID = 0;
     if (!AxsSpringTwelveSpawn(mixer, @[downstream, upstream, output], &mixerPID, &error)) {
-        NSLog(@"[SpringTwelve:Record] mixer spawn failed: %d", error);
+        AxsSpringTwelveRecordLog(@"mixer spawn failed: %d", error);
         [self axs_springtwelve_finishFailure:@"合并失败" generation:generation];
         return;
     }
@@ -344,16 +491,23 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
             BOOL valid = result == mixerPID && WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
                          stat(output.fileSystemRepresentation, &info) == 0 && info.st_size > 0;
             if (valid) {
+                AVAudioFile *audio = [[AVAudioFile alloc] initForReading:[NSURL fileURLWithPath:output] error:NULL];
+                valid = audio && audio.length > 0 && audio.processingFormat.sampleRate > 0;
+            }
+            AxsSpringTwelveRecordLog(@"mixer result=%d exit=%d signal=%d valid=%d", (int)result,
+                WIFEXITED(status) ? WEXITSTATUS(status) : -1, WIFSIGNALED(status) ? WTERMSIG(status) : 0, valid);
+            if (valid) {
                 unlink(downstream.fileSystemRepresentation);
                 unlink(upstream.fileSystemRepresentation);
-                NSLog(@"[SpringTwelve:Record] recording saved");
+                AxsSpringTwelveRecordLog(@"recording saved");
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    [self->_axs_springtwelve_indicator axs_springtwelve_showSaved];
+                    if (generation == self->_axs_springtwelve_generation && !self->_axs_springtwelve_active)
+                        [self->_axs_springtwelve_indicator axs_springtwelve_showSaved];
                     [[NSNotificationCenter defaultCenter] postNotificationName:AxsSpringTwelveRecordingStateChanged object:nil];
                 });
             } else {
                 unlink(output.fileSystemRepresentation);
-                NSLog(@"[SpringTwelve:Record] mixer produced no valid output");
+                AxsSpringTwelveRecordLog(@"mixer produced no valid output");
                 [self axs_springtwelve_finishFailure:@"未生成有效文件" generation:generation];
             }
         });
@@ -364,18 +518,18 @@ static BOOL AxsSpringTwelveSpawn(NSString *path, NSArray<NSString *> *arguments,
     if (generation != _axs_springtwelve_generation || !_axs_springtwelve_active) return;
     _axs_springtwelve_active = NO;
     _axs_springtwelve_generation++;
-    pid_t speaker = _axs_springtwelve_speakerPID;
-    pid_t mic = _axs_springtwelve_micPID;
-    _axs_springtwelve_speakerPID = 0;
-    _axs_springtwelve_micPID = 0;
+    AxsSpringTwelveRecordingWorker *speaker = _axs_springtwelve_speakerWorker;
+    AxsSpringTwelveRecordingWorker *mic = _axs_springtwelve_micWorker;
+    _axs_springtwelve_speakerWorker = nil;
+    _axs_springtwelve_micWorker = nil;
     dispatch_group_t group = _axs_springtwelve_waitGroup;
     _axs_springtwelve_waitGroup = nil;
     NSString *downstream = [_axs_springtwelve_downstreamPath copy];
     NSString *upstream = [_axs_springtwelve_upstreamPath copy];
     NSString *output = [_axs_springtwelve_outputPath copy];
-    if (speaker > 0) kill(speaker, SIGINT);
-    if (mic > 0) kill(mic, SIGINT);
-    NSLog(@"[SpringTwelve:Record] capture aborted: %@", reason);
+    [speaker axs_springtwelve_requestStop];
+    [mic axs_springtwelve_requestStop];
+    AxsSpringTwelveRecordLog(@"capture aborted: %@", reason);
     dispatch_async(dispatch_get_main_queue(), ^{ [self->_axs_springtwelve_indicator axs_springtwelve_showFailure:reason]; });
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         if (group) dispatch_group_wait(group, dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC));
@@ -405,6 +559,9 @@ static void AxsSpringTwelveCallNotification(CFNotificationCenterRef center, void
 %ctor {
     @autoreleasepool {
         if ([NSProcessInfo.processInfo.processName isEqualToString:@"SpringBoard"])
-            [[AxsSpringTwelveCallRecorder axs_springtwelve_shared] axs_springtwelve_installTelephonyObserver];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [[AxsSpringTwelveCallRecorder axs_springtwelve_shared] axs_springtwelve_installTelephonyObserver];
+            });
     }
 }
+#pragma clang diagnostic pop

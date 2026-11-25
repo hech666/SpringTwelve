@@ -5,7 +5,36 @@
 #import <unistd.h>
 #import <errno.h>
 #import <string.h>
+#import <fcntl.h>
 #import "AxsSpringTwelveSwitches.h"
+#import "AxsSpringTwelvePaths.h"
+
+// Fixed event names only: no coordinates, identifiers, text, or user content.
+static NSMutableDictionary<NSString *, NSDate *> *AxsSpringTwelvePowerMenuLogTimes;
+static void axs_springtwelve_powerLog(NSString *event) {
+    if (![NSThread isMainThread]) return;
+    if (!AxsSpringTwelvePowerMenuLogTimes) AxsSpringTwelvePowerMenuLogTimes = [NSMutableDictionary dictionary];
+    NSDate *now = [NSDate date];
+    NSDate *last = AxsSpringTwelvePowerMenuLogTimes[event];
+    if (last && [now timeIntervalSinceDate:last] < 30.0) return;
+    AxsSpringTwelvePowerMenuLogTimes[event] = now;
+    @try {
+        NSString *directory = [axs_springtwelve_recordingDirectory() stringByAppendingPathComponent:@"Diagnostics"];
+        NSFileManager *manager = NSFileManager.defaultManager;
+        [manager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @0700} error:NULL];
+        NSString *path = [directory stringByAppendingPathComponent:@"power-menu.log"];
+        if ([[manager attributesOfItemAtPath:path error:NULL][NSFileSize] unsignedLongLongValue] > 65536) {
+            NSString *previous = [path stringByAppendingString:@".previous"];
+            [manager removeItemAtPath:previous error:NULL];
+            [manager moveItemAtPath:path toPath:previous error:NULL];
+        }
+        int fd = open(path.fileSystemRepresentation, O_WRONLY | O_CREAT | O_APPEND, 0600);
+        if (fd < 0) return;
+        NSString *line = [NSString stringWithFormat:@"%.0f %@\n", now.timeIntervalSince1970, event];
+        write(fd, line.UTF8String, strlen(line.UTF8String));
+        close(fd);
+    } @catch (__unused NSException *exception) {}
+}
 
 // Clean-room UI only. No private power service, shell command, or fixed address.
 @class AxsSpringTwelvePowerMenuController;
@@ -33,13 +62,16 @@ static BOOL axs_springtwelve_powerReadBool(id object, NSString *name, BOOL *valu
 }
 
 static BOOL axs_springtwelve_powerHomeReady(UIView *home, BOOL needsKeyWindow) {
-    if (![NSThread isMainThread] || !AxsSpringTwelveOn(@"lsPowerMenuOnDesktop")) return NO;
+    if (![NSThread isMainThread]) return NO;
+    if (!AxsSpringTwelveOn(@"lsPowerMenuOnDesktop")) { axs_springtwelve_powerLog(@"disabled"); return NO; }
     UIWindow *window = home.window;
-    if (!home || !window || !window.windowScene || window.hidden || window.alpha < 0.99 ||
-        window.windowLevel != UIWindowLevelNormal ||
-        (needsKeyWindow && !window.isKeyWindow) ||
+    UIWindowScene *scene = window.windowScene;
+    if (!home || !window || window.hidden || window.alpha < 0.99 ||
+        window.windowLevel >= UIWindowLevelAlert ||
         UIApplication.sharedApplication.applicationState != UIApplicationStateActive ||
-        window.windowScene.activationState != UISceneActivationStateForegroundActive) return NO;
+        (scene && scene.activationState != UISceneActivationStateForegroundActive)) {
+        axs_springtwelve_powerLog(@"home-context-rejected"); return NO;
+    }
     for (UIView *view = home; view; view = view.superview) {
         if (view.hidden || view.alpha < 0.99 || !view.userInteractionEnabled) return NO;
     }
@@ -57,10 +89,12 @@ static BOOL axs_springtwelve_powerHomeReady(UIView *home, BOOL needsKeyWindow) {
 }
 
 static BOOL axs_springtwelve_powerBlankPath(UIView *leaf, UIView *home) {
-    // Fail closed on obvious interactive content (icons, widgets, folders,
-    // controls) but allow generic container views whose class names vary by
-    // build. A real icon-list page must be in the path.
-    BOOL sawList = NO;
+    // A hit on the root itself is a valid empty-workspace hit; UIKit can return
+    // the root rather than its wallpaper child when no subview handles it.
+    if (leaf == home) return YES;
+    // The root workspace is the authorization boundary. Reject identifiable
+    // icons, widgets, folders, controls, hidden views, and active scrolling; a
+    // wallpaper/background hit need not descend through SBIconListView.
     for (UIView *view = leaf; view && view != home; view = view.superview) {
         NSString *name = NSStringFromClass(view.class);
         BOOL list = [name isEqualToString:@"SBIconListView"] ||
@@ -75,8 +109,7 @@ static BOOL axs_springtwelve_powerBlankPath(UIView *leaf, UIView *home) {
             UIScrollView *scroll = (UIScrollView *)view;
             if (scroll.dragging || scroll.decelerating) return NO;
         }
-        sawList |= list;
-        if (view.superview == home) return sawList;
+        if (view.superview == home) return YES;
     }
     return NO;
 }
@@ -118,7 +151,7 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
     UIWindow *previous = self.axs_springtwelve_previousWindow;
     if (restoreKey && previous && !previous.hidden &&
         UIApplication.sharedApplication.applicationState == UIApplicationStateActive &&
-        previous.windowScene.activationState == UISceneActivationStateForegroundActive) {
+        (!previous.windowScene || previous.windowScene.activationState == UISceneActivationStateForegroundActive)) {
         [previous makeKeyWindow];
     }
     if (AxsSpringTwelvePowerMenuActive == self) AxsSpringTwelvePowerMenuActive = nil;
@@ -261,25 +294,34 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
 @implementation AxsSpringTwelvePowerMenuTarget
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)recognizer shouldReceiveTouch:(UITouch *)touch {
     UIView *home = self.axs_springtwelve_home;
-    return !AxsSpringTwelvePowerMenuActive && touch.type == UITouchTypeDirect &&
-        axs_springtwelve_powerBlankPath(touch.view, home) &&
-        axs_springtwelve_powerBlankPoint(home, [touch locationInView:home]);
+    if (AxsSpringTwelvePowerMenuActive || touch.type != UITouchTypeDirect) return NO;
+    BOOL blankPath = axs_springtwelve_powerBlankPath(touch.view, home);
+    if (!blankPath) { axs_springtwelve_powerLog(@"touch-not-blank"); return NO; }
+    BOOL blankPoint = axs_springtwelve_powerBlankPoint(home, [touch locationInView:home]);
+    if (!blankPoint) axs_springtwelve_powerLog(@"touch-context-or-point-rejected");
+    return blankPoint;
 }
 
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)recognizer {
-    return !AxsSpringTwelvePowerMenuActive &&
-        axs_springtwelve_powerBlankPoint(self.axs_springtwelve_home,
-            [recognizer locationInView:self.axs_springtwelve_home]);
+    if (AxsSpringTwelvePowerMenuActive) return NO;
+    BOOL accepted = axs_springtwelve_powerBlankPoint(self.axs_springtwelve_home,
+        [recognizer locationInView:self.axs_springtwelve_home]);
+    if (!accepted) axs_springtwelve_powerLog(@"gesture-should-begin-rejected");
+    return accepted;
 }
 
 - (void)axs_springtwelve_longPress:(UILongPressGestureRecognizer *)recognizer {
     if (recognizer.state != UIGestureRecognizerStateBegan || AxsSpringTwelvePowerMenuActive) return;
     UIView *home = self.axs_springtwelve_home;
-    if (!axs_springtwelve_powerBlankPoint(home, [recognizer locationInView:home])) return;
+    if (!axs_springtwelve_powerBlankPoint(home, [recognizer locationInView:home])) {
+        axs_springtwelve_powerLog(@"long-press-rejected-at-begin"); return;
+    }
+    axs_springtwelve_powerLog(@"menu-present-request");
     AxsSpringTwelvePowerMenuController *controller = [AxsSpringTwelvePowerMenuController new];
     controller.axs_springtwelve_home = home;
     controller.axs_springtwelve_previousWindow = home.window;
-    UIWindow *overlay = [[UIWindow alloc] initWithWindowScene:home.window.windowScene];
+    UIWindowScene *scene = home.window.windowScene;
+    UIWindow *overlay = scene ? [[UIWindow alloc] initWithWindowScene:scene] : [[UIWindow alloc] initWithFrame:home.window.bounds];
     overlay.frame = home.window.bounds;
     overlay.windowLevel = UIWindowLevelNormal + 1.0; // Never an alert/lock-screen level.
     overlay.backgroundColor = UIColor.clearColor;
@@ -320,6 +362,7 @@ static void axs_springtwelve_powerInstall(UIView *home) {
     recognizer.delegate = target;
     objc_setAssociatedObject(home, &AxsSpringTwelvePowerMenuTargetKey, target, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [home addGestureRecognizer:recognizer];
+    axs_springtwelve_powerLog(@"gesture-installed");
 }
 
 %group AxsSpringTwelvePowerMenuHooks
@@ -346,6 +389,12 @@ static void axs_springtwelve_powerInstallExisting(Class homeClass) {
             axs_springtwelve_powerCollectHomeViews(window.rootViewController.view, homeClass, found);
         }
     }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    // SpringBoard also has legacy windows that do not belong to a UIWindowScene.
+    for (UIWindow *window in UIApplication.sharedApplication.windows)
+        axs_springtwelve_powerCollectHomeViews(window, homeClass, found);
+#pragma clang diagnostic pop
     for (UIView *home in found) axs_springtwelve_powerInstall(home);
 }
 
@@ -355,8 +404,11 @@ static void axs_springtwelve_powerInstallExisting(Class homeClass) {
             ![NSProcessInfo.processInfo.processName isEqualToString:@"SpringBoard"]) return;
         Class homeClass = NSClassFromString(@"SBRootFolderView");
         if (!homeClass || ![homeClass isSubclassOfClass:UIView.class] ||
-            !class_getInstanceMethod(homeClass, @selector(didMoveToWindow))) return;
+            !class_getInstanceMethod(homeClass, @selector(didMoveToWindow))) {
+            axs_springtwelve_powerLog(@"home-class-or-hook-method-missing"); return;
+        }
         %init(AxsSpringTwelvePowerMenuHooks, AxsSpringTwelvePowerMenuHomeView = homeClass);
+        axs_springtwelve_powerLog(@"hook-initialized");
         // Retroactive install: if the root folder view already moved to a window
         // before this tweak loaded, the didMoveToWindow hook never fires.
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),

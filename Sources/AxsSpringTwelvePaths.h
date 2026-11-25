@@ -16,6 +16,15 @@ static inline NSString *axs_springtwelve_resourcePath(NSString *rootfsPath) {
 #endif
 }
 
+static inline NSString *axs_springtwelve_recordingDirectory(void) {
+    NSString *path = @"/var/mobile/Documents/CallRecordings";
+#ifdef THEOS_PACKAGE_SCHEME_ROOTHIDE
+    return jbroot(path);
+#else
+    return path;
+#endif
+}
+
 static inline NSString *axs_springtwelve_preferencesPath(void) {
     NSString *path = @"/var/mobile/Library/Preferences/com.axs.springtwelve.plist";
 #ifdef THEOS_PACKAGE_SCHEME_ROOTHIDE

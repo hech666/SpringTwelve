@@ -1,5 +1,6 @@
 #import "AxsSpringTwelveRootListController.h"
 #import "AxsSpringTwelvePreferences.h"
+#import "AxsSpringTwelvePaths.h"
 #import <Preferences/PSSpecifier.h>
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -19,6 +20,7 @@
                      set:nil get:nil detail:nil cell:PSGroupCell edit:nil]];
         [self axs_springtwelve_addButton:@"录音列表" action:@selector(axs_springtwelve_openRecordings:) to:items];
         [self axs_springtwelve_addButton:@"打开录音目录" action:@selector(axs_springtwelve_openRecordingsFolder:) to:items];
+        [self axs_springtwelve_addButton:@"导出功能诊断" action:@selector(axs_springtwelve_exportDiagnostics:) to:items];
         [self axs_springtwelve_addButton:@"Sileo 越狱源" action:@selector(axs_springtwelve_openRepository:) to:items];
         [self axs_springtwelve_addButton:@"TG分享频道" action:@selector(axs_springtwelve_openTelegram:) to:items];
         [self axs_springtwelve_addButton:@"QQ交流群组" action:@selector(axs_springtwelve_openQQ:) to:items];
@@ -65,12 +67,37 @@
 }
 
 - (void)axs_springtwelve_openRecordingsFolder:(id)sender {
-    NSURL *directoryURL = [NSURL fileURLWithPath:@"/var/mobile/Documents/CallRecordings" isDirectory:YES];
+    NSURL *directoryURL = [NSURL fileURLWithPath:axs_springtwelve_recordingDirectory() isDirectory:YES];
     UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
         initForOpeningContentTypes:@[UTTypeFolder] asCopy:NO];
     picker.directoryURL = directoryURL;
     picker.allowsMultipleSelection = NO;
     [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)axs_springtwelve_exportDiagnostics:(id)sender {
+    NSString *directory = [axs_springtwelve_recordingDirectory() stringByAppendingPathComponent:@"Diagnostics"];
+    NSMutableString *report = [NSMutableString stringWithString:@"SpringTwelve diagnostics (event states only; no audio or contact fields)\n"];
+    BOOL found = NO;
+    for (NSString *name in @[@"AxsSpringTwelve-recording.log.previous", @"AxsSpringTwelve-recording.log", @"power-menu.log.previous", @"power-menu.log"]) {
+        NSString *text = [NSString stringWithContentsOfFile:[directory stringByAppendingPathComponent:name] encoding:NSUTF8StringEncoding error:NULL];
+        if (!text.length) continue;
+        found = YES;
+        [report appendFormat:@"\n=== %@ ===\n%@", name, text];
+    }
+    if (!found) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"暂无诊断日志"
+            message:@"请安装新版本并注销桌面，然后分别测试长按和蜂窝通话。如果仍没有日志，可能是模块未注入或日志目录不可写。"
+            preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    // Share a text snapshot, never the recording directory or any audio file.
+    UIActivityViewController *share = [[UIActivityViewController alloc] initWithActivityItems:@[report] applicationActivities:nil];
+    share.popoverPresentationController.sourceView = self.view;
+    share.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
+    [self presentViewController:share animated:YES completion:nil];
 }
 
 - (void)axs_springtwelve_openURL:(NSURL *)url fallback:(NSURL *)fallback {
