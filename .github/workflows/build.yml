@@ -61,9 +61,18 @@ jobs:
           ldid -e "$HELPER_RECORD" | grep -q 'com.apple.coreaudio.private.SystemWideTap'
           test -f "$RUNNER_TEMP/deb-root/var/jb/Library/PreferenceBundles/AxsSpringTwelvePrefs.bundle/Info.plist" -o -f "$RUNNER_TEMP/deb-root/Library/PreferenceBundles/AxsSpringTwelvePrefs.bundle/Info.plist"
           python3 scripts/verify-recording-package.py "$DEB"
+      - name: Package separate LGPL relink materials
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s artifacts/MP3Relink/AxsSpringTwelveMP3Mixer.o
+          test -s artifacts/MP3Relink/libmp3lame.a
+          (cd artifacts && zip -qr ../packages/SpringTwelve-MP3Relink-${GITHUB_RUN_NUMBER}.zip MP3Relink)
       - uses: actions/upload-artifact@v4
         with:
           name: SpringTwelve-Roothide-${{ github.run_number }}
-          path: packages/*.deb
+          path: |
+            packages/*.deb
+            packages/*MP3Relink*.zip
           if-no-files-found: error
           retention-days: 30

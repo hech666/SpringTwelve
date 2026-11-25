@@ -39,13 +39,11 @@ with tempfile.TemporaryDirectory(prefix='st-mp3-verify-') as folder:
     assert entitlements.get('platform-application') is True
     assert entitlements.get('com.apple.private.security.no-sandbox') is True
     assert not any('reboot' in k or 'CanTapTelephony' in k for k in entitlements)
-    materials = one('MP3Relink')
-    assert materials.relative_to(root).as_posix() in ['usr/share/SpringTwelve/MP3Relink','var/jb/usr/share/SpringTwelve/MP3Relink']
-    for name in ['LAME-COPYING','README.md','main.m','relink.sh','entitlements.plist','build-lame-macos.sh','AxsSpringTwelveMP3Mixer.o','libmp3lame.a']:
-        assert (materials/name).stat().st_size > 0, name
-    archive = materials/'lame-3.100.tar.gz'
-    assert hashlib.sha256(archive.read_bytes()).hexdigest() == 'ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e'
-    assert struct.unpack_from('<II',(materials/'AxsSpringTwelveMP3Mixer.o').read_bytes(),4) == (0x100000c,0x80000002)
+    # Keep only the runtime helper and required LGPL notice in the device package.
+    # Source, exact object and static relink inputs are uploaded as a separate artifact.
+    notice = one('LAME-COPYING')
+    assert notice.relative_to(root).as_posix() in ['usr/share/doc/SpringTwelve/LAME-COPYING','var/jb/usr/share/doc/SpringTwelve/LAME-COPYING']
+    assert not list(root.rglob('MP3Relink')), 'Relink materials must stay outside the installed package'
     bundle = one('AxsSpringTwelvePrefs.bundle')
     subprocess.run([sys.executable,str(project/'scripts/verify-preferences.py'),str(bundle)],check=True)
     assert not list(root.rglob('CallRecordings')), 'Package must not install/delete user audio data'

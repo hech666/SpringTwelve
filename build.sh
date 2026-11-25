@@ -13,6 +13,8 @@ if [ ! -f MP3Helper/.build/arm64e/install/lib/libmp3lame.a ]; then
     bash MP3Helper/build-lame-macos.sh
 fi
 make clean
+rm -rf artifacts/MP3Relink
+mkdir -p artifacts
 # dm.pl can retain host numeric uid/gid even when it writes root/wheel names.
 # Normalize archive ownership numerically; postinst separately reapplies setuid.
 make package THEOS_PACKAGE_SCHEME="$SCHEME" PACKAGE_VERSION="${PACKAGE_VERSION:-5.2.0}" _THEOS_PLATFORM_DPKG_DEB="$(pwd)/scripts/dpkg-deb-root" _THEOS_PLATFORM_DPKG_DEB_COMPRESSION=xz

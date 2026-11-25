@@ -13,4 +13,4 @@ AxsSpringTwelveMP3Mixer_CODESIGN_FLAGS = -S"$(THEOS_PROJECT_DIR)/MP3Helper/entit
 include $(THEOS_MAKE_PATH)/tool.mk
 
 after-AxsSpringTwelveMP3Mixer-stage::
-	$(ECHO_NOTHING)python3 "$(THEOS_PROJECT_DIR)/MP3Helper/stage-relink.py" "$(THEOS_OBJ_DIR)" "$(THEOS_STAGING_DIR)/usr/share/SpringTwelve/MP3Relink"$(ECHO_END)
+	$(ECHO_NOTHING)python3 "$(THEOS_PROJECT_DIR)/MP3Helper/stage-relink.py" "$(THEOS_OBJ_DIR)" "$(THEOS_PROJECT_DIR)/artifacts/MP3Relink"; mkdir -p "$(THEOS_STAGING_DIR)/usr/share/doc/SpringTwelve"; cp "$(THEOS_PROJECT_DIR)/MP3Helper/LAME-COPYING" "$(THEOS_STAGING_DIR)/usr/share/doc/SpringTwelve/LAME-COPYING"$(ECHO_END)
