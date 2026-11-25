@@ -6,7 +6,6 @@
 |---|---|
 | 快速注销 | 当前 SpringBoard 对自身 `kill(getpid(), SIGTERM)` |
 | 强制注销 | 当前 SpringBoard 对自身 `kill(getpid(), SIGKILL)` |
-| 请求安全模式 | 当前 SpringBoard 对自身 `kill(getpid(), SIGSEGV)`；越狱处理器决定是否进入安全模式 |
 | 重启桌面 | `SBSRelaunchAction actionWithReason:@"RestartRenderServer" options:4 targetURL:nil` → `FBSSystemService sendActions:withResult:` |
 | 重启用户空间 | 专用 setuid root `AxsSpringTwelvePowerHelper userspace-reboot` → `reboot3(0x2000000000000000ULL)` |
 | 重启设备 | `FBSSystemService reboot` |

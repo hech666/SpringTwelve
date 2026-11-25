@@ -12,7 +12,6 @@ NSString *axs_springtwelve_powerActionTitle(AxsSpringTwelvePowerAction action) {
     switch (action) {
         case AxsSpringTwelvePowerActionQuickRespring: return @"快速注销";
         case AxsSpringTwelvePowerActionForceRespring: return @"强制注销";
-        case AxsSpringTwelvePowerActionSafeMode: return @"请求安全模式";
         case AxsSpringTwelvePowerActionRespring: return @"重启桌面";
         case AxsSpringTwelvePowerActionUserspaceReboot: return @"重启用户空间";
         case AxsSpringTwelvePowerActionReboot: return @"重启设备";
@@ -27,8 +26,6 @@ NSString *axs_springtwelve_powerActionWarning(AxsSpringTwelvePowerAction action)
             return @"将结束桌面进程（SIGTERM 15），由系统重新拉起桌面。未保存的界面状态可能丢失。是否继续？";
         case AxsSpringTwelvePowerActionForceRespring:
             return @"将强制结束桌面进程（SIGKILL 9），由系统重新拉起桌面。未保存的界面状态可能丢失。是否继续？";
-        case AxsSpringTwelvePowerActionSafeMode:
-            return @"将向桌面进程发送 SIGSEGV（11）以请求安全模式。是否进入安全模式取决于越狱环境，无法保证；未保存的界面状态可能丢失。是否继续？";
         case AxsSpringTwelvePowerActionRespring:
             return @"将通过系统服务重新启动桌面，当前界面会关闭。请先结束通话并保存正在进行的操作。是否继续？";
         case AxsSpringTwelvePowerActionUserspaceReboot:
@@ -96,8 +93,7 @@ BOOL axs_springtwelve_powerActionAvailable(AxsSpringTwelvePowerAction action) {
     @try {
         switch (action) {
             case AxsSpringTwelvePowerActionQuickRespring:
-            case AxsSpringTwelvePowerActionForceRespring:
-            case AxsSpringTwelvePowerActionSafeMode: return YES;
+            case AxsSpringTwelvePowerActionForceRespring: return YES;
             case AxsSpringTwelvePowerActionUserspaceReboot: {
                 struct stat info;
                 NSString *path = axs_springtwelve_powerHelperPath();
@@ -210,10 +206,8 @@ void axs_springtwelve_powerActionRequest(AxsSpringTwelvePowerAction action,
     @try {
         switch (action) {
             case AxsSpringTwelvePowerActionQuickRespring:
-            case AxsSpringTwelvePowerActionForceRespring:
-            case AxsSpringTwelvePowerActionSafeMode: {
-                int signal = action == AxsSpringTwelvePowerActionQuickRespring ? SIGTERM :
-                    (action == AxsSpringTwelvePowerActionForceRespring ? SIGKILL : SIGSEGV);
+            case AxsSpringTwelvePowerActionForceRespring: {
+                int signal = action == AxsSpringTwelvePowerActionQuickRespring ? SIGTERM : SIGKILL;
                 int result = kill(getpid(), signal);
                 axs_springtwelve_powerDeliver(completion, result == -1 ?
                     [NSString stringWithFormat:@"信号请求失败（errno %d），未尝试其他操作。", errno] : nil);

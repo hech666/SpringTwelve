@@ -4,8 +4,8 @@
 typedef NS_ENUM(NSInteger, AxsSpringTwelvePowerAction) {
     AxsSpringTwelvePowerActionQuickRespring = 1,
     AxsSpringTwelvePowerActionForceRespring,
-    AxsSpringTwelvePowerActionSafeMode,
-    AxsSpringTwelvePowerActionRespring,
+    // Keep existing operation identifiers stable; the removed action used 3.
+    AxsSpringTwelvePowerActionRespring = 4,
     AxsSpringTwelvePowerActionUserspaceReboot,
     AxsSpringTwelvePowerActionReboot,
     AxsSpringTwelvePowerActionShutdown

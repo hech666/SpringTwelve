@@ -123,6 +123,22 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
     return axs_springtwelve_powerBlankPath(hit, home);
 }
 
+// Scale the previous effective size (including small-screen caps), not only
+// its preferred constants. Both cards share the exact on-screen center.
+static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIView *card, UIView *background, CGFloat originalHeight) {
+    const CGFloat widthScale = 2.0 / 3.0, heightScale = 3.0 / 4.0;
+    UILayoutGuide *safe = background.safeAreaLayoutGuide;
+    NSLayoutConstraint *width = [card.widthAnchor constraintEqualToConstant:400.0 * widthScale];
+    NSLayoutConstraint *height = [card.heightAnchor constraintEqualToConstant:originalHeight * heightScale];
+    width.priority = height.priority = UILayoutPriorityDefaultHigh;
+    return @[
+        [card.centerXAnchor constraintEqualToAnchor:background.centerXAnchor],
+        [card.centerYAnchor constraintEqualToAnchor:background.centerYAnchor], width, height,
+        [card.widthAnchor constraintLessThanOrEqualToAnchor:safe.widthAnchor multiplier:widthScale constant:-32.0 * widthScale],
+        [card.heightAnchor constraintLessThanOrEqualToAnchor:safe.heightAnchor multiplier:heightScale constant:-24.0 * heightScale]
+    ];
+}
+
 @interface AxsSpringTwelvePowerMenuController : UIViewController
 @property(nonatomic, weak) UIView *axs_springtwelve_home;
 @property(nonatomic, weak) UIWindow *axs_springtwelve_homeWindow;
@@ -198,25 +214,36 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
     [panel addSubview:scroll];
     UIStackView *stack = [UIStackView new];
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 10.0;
+    stack.spacing = 6.0;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     [scroll addSubview:stack];
     UILabel *title = [UILabel new];
     title.text = @"桌面电源菜单";
     title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    title.adjustsFontForContentSizeCategory = YES;
     title.numberOfLines = 0;
     title.textAlignment = NSTextAlignmentCenter;
     [stack addArrangedSubview:title];
     UILabel *status = [UILabel new];
-    status.text = @"所有操作均需中文二次确认。请先结束通话并保存数据；不可用的系统接口或提权工具会单独标明。";
+    // No introductory text or reserved blank space. Reveal only live results.
+    status.hidden = YES;
     status.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    status.adjustsFontForContentSizeCategory = YES;
     status.numberOfLines = 0;
     status.textAlignment = NSTextAlignmentCenter;
     self.axs_springtwelve_status = status;
     [stack addArrangedSubview:status];
-    for (NSInteger selected = AxsSpringTwelvePowerActionQuickRespring;
-         selected <= AxsSpringTwelvePowerActionShutdown; selected++) {
-        AxsSpringTwelvePowerAction action = (AxsSpringTwelvePowerAction)selected;
+    UIStackView *actions = [UIStackView new];
+    actions.axis = UILayoutConstraintAxisVertical;
+    actions.distribution = UIStackViewDistributionFillEqually;
+    [actions setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisVertical];
+    [stack addArrangedSubview:actions];
+    NSArray<NSNumber *> *selections = @[@(AxsSpringTwelvePowerActionQuickRespring),
+        @(AxsSpringTwelvePowerActionForceRespring), @(AxsSpringTwelvePowerActionRespring),
+        @(AxsSpringTwelvePowerActionUserspaceReboot), @(AxsSpringTwelvePowerActionReboot),
+        @(AxsSpringTwelvePowerActionShutdown)];
+    for (NSNumber *selection in selections) {
+        AxsSpringTwelvePowerAction action = (AxsSpringTwelvePowerAction)selection.integerValue;
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
         BOOL available = axs_springtwelve_powerActionAvailable(action);
         NSString *title = axs_springtwelve_powerActionTitle(action);
@@ -227,27 +254,33 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
         button.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
         button.titleLabel.adjustsFontForContentSizeCategory = YES;
         button.enabled = available;
-        button.tag = selected;
+        button.tag = action;
         [button setTitleColor:UIColor.systemRedColor forState:UIControlStateNormal];
         [button addTarget:self action:@selector(axs_springtwelve_confirm:) forControlEvents:UIControlEventTouchUpInside];
         [button.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
-        [stack addArrangedSubview:button];
+        [actions addArrangedSubview:button];
+        UIView *divider = [UIView new];
+        divider.backgroundColor = UIColor.separatorColor;
+        divider.userInteractionEnabled = NO;
+        divider.isAccessibilityElement = NO;
+        divider.translatesAutoresizingMaskIntoConstraints = NO;
+        [button addSubview:divider];
+        [NSLayoutConstraint activateConstraints:@[
+            [divider.heightAnchor constraintEqualToConstant:0.5],
+            [divider.leadingAnchor constraintEqualToAnchor:button.leadingAnchor constant:4],
+            [divider.trailingAnchor constraintEqualToAnchor:button.trailingAnchor constant:-4],
+            [divider.bottomAnchor constraintEqualToAnchor:button.bottomAnchor]
+        ]];
     }
     UIButton *cancel = [UIButton buttonWithType:UIButtonTypeSystem];
     [cancel setTitle:@"取消" forState:UIControlStateNormal];
+    cancel.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+    cancel.titleLabel.adjustsFontForContentSizeCategory = YES;
     [cancel.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
     [cancel addTarget:self action:@selector(axs_springtwelve_close) forControlEvents:UIControlEventTouchUpInside];
     [stack addArrangedSubview:cancel];
-    UILayoutGuide *safe = background.safeAreaLayoutGuide;
-    NSLayoutConstraint *preferredHeight = [panel.heightAnchor constraintEqualToConstant:590];
-    preferredHeight.priority = UILayoutPriorityDefaultHigh;
-    NSLayoutConstraint *preferredWidth = [panel.widthAnchor constraintEqualToConstant:400];
-    preferredWidth.priority = UILayoutPriorityDefaultHigh;
+    [NSLayoutConstraint activateConstraints:axs_springtwelve_powerCardConstraints(panel, background, 590.0)];
     [NSLayoutConstraint activateConstraints:@[
-        [panel.centerXAnchor constraintEqualToAnchor:safe.centerXAnchor],
-        [panel.centerYAnchor constraintEqualToAnchor:safe.centerYAnchor], preferredWidth,
-        [panel.widthAnchor constraintLessThanOrEqualToAnchor:safe.widthAnchor constant:-32],
-        [panel.heightAnchor constraintLessThanOrEqualToAnchor:safe.heightAnchor constant:-24], preferredHeight,
         [scroll.topAnchor constraintEqualToAnchor:panel.topAnchor constant:16],
         [scroll.bottomAnchor constraintEqualToAnchor:panel.bottomAnchor constant:-16],
         [scroll.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:16],
@@ -256,9 +289,15 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
         [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor],
         [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor],
         [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor],
-        [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor]
+        [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor],
+        [stack.heightAnchor constraintGreaterThanOrEqualToAnchor:scroll.frameLayoutGuide.heightAnchor]
     ]];
     background.accessibilityViewIsModal = YES;
+}
+
+- (void)axs_springtwelve_setStatus:(NSString *)message {
+    self.axs_springtwelve_status.text = message;
+    self.axs_springtwelve_status.hidden = message.length == 0;
 }
 
 - (void)axs_springtwelve_cancelConfirmation {
@@ -267,7 +306,7 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
     [self.axs_springtwelve_confirmation removeFromSuperview];
     self.axs_springtwelve_confirmation = nil;
     self.axs_springtwelve_menuPanel.hidden = NO;
-    UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, self.axs_springtwelve_status);
+    UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, self.axs_springtwelve_menuPanel);
 }
 
 - (BOOL)accessibilityPerformEscape {
@@ -281,7 +320,7 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
     if (self.axs_springtwelve_confirmation || self.axs_springtwelve_pendingAction || self.axs_springtwelve_executing) return;
     AxsSpringTwelvePowerAction selected = (AxsSpringTwelvePowerAction)sender.tag;
     if (!axs_springtwelve_powerActionAvailable(selected)) {
-        self.axs_springtwelve_status.text = @"此操作所需的系统接口或提权工具当前不可用，请检查安装后重新打开面板。";
+        [self axs_springtwelve_setStatus:@"此操作所需的系统接口或提权工具当前不可用，请检查安装后重新打开面板。"];
         return;
     }
     NSUUID *token = NSUUID.UUID;
@@ -300,7 +339,7 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
     [card addSubview:scroll];
     UIStackView *stack = [UIStackView new];
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 18;
+    stack.spacing = 12;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     [scroll addSubview:stack];
     UILabel *heading = [UILabel new];
@@ -345,19 +384,25 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
             [controller axs_springtwelve_close]; return;
         }
         controller.axs_springtwelve_executing = YES;
-        controller.axs_springtwelve_status.text = @"正在提交操作，请勿重复点击。";
-        NSArray *events = @[@"quick-respring-request", @"force-respring-request", @"safe-mode-request",
-            @"respring-request", @"userspace-reboot-request", @"device-reboot-request", @"shutdown-request"];
-        axs_springtwelve_powerLog(events[(NSUInteger)selected - 1]);
+        [controller axs_springtwelve_setStatus:@"正在提交操作，请勿重复点击。"];
+        NSDictionary<NSNumber *, NSString *> *events = @{
+            @(AxsSpringTwelvePowerActionQuickRespring): @"quick-respring-request",
+            @(AxsSpringTwelvePowerActionForceRespring): @"force-respring-request",
+            @(AxsSpringTwelvePowerActionRespring): @"respring-request",
+            @(AxsSpringTwelvePowerActionUserspaceReboot): @"userspace-reboot-request",
+            @(AxsSpringTwelvePowerActionReboot): @"device-reboot-request",
+            @(AxsSpringTwelvePowerActionShutdown): @"shutdown-request"
+        };
+        axs_springtwelve_powerLog(events[@(selected)]);
         axs_springtwelve_powerActionRequest(selected, ^(NSString *error) {
             AxsSpringTwelvePowerMenuController *live = weakSelf;
             if (!live || live.axs_springtwelve_closing || AxsSpringTwelvePowerMenuActive != live) return;
             if (error) {
                 live.axs_springtwelve_executing = NO;
-                live.axs_springtwelve_status.text = error;
+                [live axs_springtwelve_setStatus:error];
                 axs_springtwelve_powerLog(@"action-request-error");
             } else {
-                live.axs_springtwelve_status.text = @"操作请求已提交。若设备未响应，请关闭面板并导出功能诊断；提交不代表重启已经完成。";
+                [live axs_springtwelve_setStatus:@"操作请求已提交。若设备未响应，请关闭面板并导出功能诊断；提交不代表重启已经完成。"];
                 axs_springtwelve_powerLog(@"action-request-submitted");
             }
             UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, live.axs_springtwelve_status.text);
@@ -369,15 +414,8 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
         [button.heightAnchor constraintGreaterThanOrEqualToConstant:48].active = YES;
         [stack addArrangedSubview:button];
     }
-    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
-    NSLayoutConstraint *width = [card.widthAnchor constraintEqualToConstant:400];
-    NSLayoutConstraint *height = [card.heightAnchor constraintEqualToConstant:440];
-    width.priority = height.priority = UILayoutPriorityDefaultHigh;
+    [NSLayoutConstraint activateConstraints:axs_springtwelve_powerCardConstraints(card, self.view, 440.0)];
     [NSLayoutConstraint activateConstraints:@[
-        [card.centerXAnchor constraintEqualToAnchor:safe.centerXAnchor],
-        [card.centerYAnchor constraintEqualToAnchor:safe.centerYAnchor], width, height,
-        [card.widthAnchor constraintLessThanOrEqualToAnchor:safe.widthAnchor constant:-32],
-        [card.heightAnchor constraintLessThanOrEqualToAnchor:safe.heightAnchor constant:-24],
         [scroll.topAnchor constraintEqualToAnchor:card.topAnchor constant:20],
         [scroll.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-20],
         [scroll.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
