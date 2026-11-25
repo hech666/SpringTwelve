@@ -5,6 +5,7 @@
 #import <objc/runtime.h>
 #import <mach-o/dyld.h>
 #import <string.h>
+#include <atomic>
 
 #pragma mark - Dynamic access and associated state
 
@@ -16,6 +17,8 @@ static char AxsDialT9ResultsKey;
 static char AxsDialT9ObservedLCDKey;
 static char AxsDialT9QueryKey;
 static char AxsDialT9GenerationKey;
+static char AxsDialT9RetryCountKey;
+static char AxsDialT9ForceRetryKey;
 static char AxsDialOriginalButtonKey;
 static char AxsDialOriginalHiddenKey;
 static char AxsDialIdentityKey;
@@ -205,16 +208,36 @@ static NSArray *AxsDialContactCache;
 static NSMutableArray *AxsDialContactWaiters;
 static BOOL AxsDialContactLoadStarted;
 static BOOL AxsDialContactCacheReady;
+static NSTimeInterval AxsDialContactRetryAfter;
+static NSHashTable *AxsDialControllers;
+static char AxsDialT9SuppressedKey;
+static std::atomic<bool> AxsDialApplicationActive{false};
+
+static BOOL AxsDialIsApplicationActive(void) {
+    return AxsDialApplicationActive.load(std::memory_order_acquire);
+}
 
 static void AxsDialFinishContactLoad(NSArray *contacts) {
-    AxsDialContactCache = [contacts copy] ?: @[];
-    AxsDialContactCacheReady = YES;
+    BOOL success = contacts != nil;
+    if (success) {
+        AxsDialContactCache = [contacts copy];
+        AxsDialContactCacheReady = YES;
+        AxsDialContactRetryAfter = 0.0;
+    } else {
+        AxsDialContactCache = @[];
+        AxsDialContactCacheReady = NO;
+        AxsDialContactRetryAfter = NSProcessInfo.processInfo.systemUptime + 5.0;
+    }
+    NSLog(@"[SpringTwelve:T9] contacts %@ count=%lu",
+          success ? @"loaded" : @"failed",
+          (unsigned long)(success ? AxsDialContactCache.count : 0));
     AxsDialContactLoadStarted = NO;
     NSArray *waiters = [AxsDialContactWaiters copy] ?: @[];
     [AxsDialContactWaiters removeAllObjects];
+    NSArray *result = AxsDialContactCache ?: @[];
     for (id waiterObject in waiters) {
-        void (^waiter)(NSArray *) = waiterObject;
-        dispatch_async(dispatch_get_main_queue(), ^{ waiter(AxsDialContactCache); });
+        void (^waiter)(NSArray *, BOOL) = waiterObject;
+        dispatch_async(dispatch_get_main_queue(), ^{ waiter(result, success); });
     }
 }
 
@@ -241,32 +264,44 @@ static void AxsDialFetchContacts(id store) {
         };
         BOOL success = ((BOOL (*)(id, SEL, id, NSError **, id))objc_msgSend)(
             store, enumerate, request, &error, block);
-        AxsDialFinishContactLoad(success ? contacts : nil);
-    } @catch (__unused NSException *exception) {
+        NSLog(@"[SpringTwelve:T9] enumeration success=%d contacts=%lu error=%@/%ld",
+              success, (unsigned long)contacts.count,
+              error.domain ?: @"none", (long)error.code);
+        AxsDialFinishContactLoad(success && !error ? contacts : nil);
+    } @catch (NSException *exception) {
+        NSLog(@"[SpringTwelve:T9] enumeration exception=%@", exception.name);
         AxsDialFinishContactLoad(nil);
     }
 }
 
-static void AxsDialLoadContacts(void (^completion)(NSArray *)) {
+static void AxsDialLoadContacts(void (^completion)(NSArray *, BOOL)) {
     if (!completion) return;
     dispatch_async(AxsDialContactsQueue(), ^{
         if (!AxsDialContactWaiters) AxsDialContactWaiters = [NSMutableArray array];
+        if (!AxsDialIsApplicationActive()) {
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(@[], NO); });
+            return;
+        }
         if (AxsDialContactCacheReady) {
             NSArray *cached = AxsDialContactCache ?: @[];
-            dispatch_async(dispatch_get_main_queue(), ^{ completion(cached); });
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(cached, YES); });
+            return;
+        }
+        if (AxsDialContactRetryAfter > NSProcessInfo.processInfo.systemUptime) {
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(@[], NO); });
             return;
         }
         [AxsDialContactWaiters addObject:[completion copy]];
         if (AxsDialContactLoadStarted) return;
         AxsDialContactLoadStarted = YES;
 
-        // T9 does not ask for contact permission. The Phone app is a system
-        // process that already has contacts access, so read the store directly.
-        // No authorization status check and no requestAccess prompt are used:
-        // switching T9 on is enough to make it work.
+        // Do not request access here. Contacts.framework enforces the access
+        // available to the host process; absence of a prompt is not a bypass.
         @try {
-            dlopen("/System/Library/Frameworks/Contacts.framework/Contacts", RTLD_LAZY);
+            void *contactsHandle = dlopen("/System/Library/Frameworks/Contacts.framework/Contacts", RTLD_LAZY);
             Class storeClass = NSClassFromString(@"CNContactStore");
+            NSLog(@"[SpringTwelve:T9] contacts framework=%d storeClass=%d",
+                  contactsHandle != NULL, storeClass != Nil);
             if (!storeClass) {
                 AxsDialFinishContactLoad(nil);
                 return;
@@ -421,23 +456,35 @@ static void AxsDialLayoutT9Bar(id controller) {
         return;
     }
     UIView *host = dialerView;
-    UIView *lcd = lcdView;
-    CGRect lcdRect = [lcd convertRect:lcd.bounds toView:host];
+    CGRect lcdRect = [lcdView convertRect:lcdView.bounds toView:host];
     CGFloat height = 38.0;
     CGFloat inset = 8.0;
     CGFloat y = CGRectGetMaxY(lcdRect) + 4.0;
-    UIView *callButton = AxsDialPart(controller, @"callButton");
-    if ([callButton isKindOfClass:[UIView class]] && [((UIView *)callButton).superview isKindOfClass:[UIView class]]) {
-        CGRect callRect = [((UIView *)callButton).superview convertRect:((UIView *)callButton).frame toView:host];
-        if (y + height > CGRectGetMinY(callRect) - 2.0) y = CGRectGetMinY(lcdRect) - height - 4.0;
+
+    // Place suggestions in the gap above the keypad (the call button may be
+    // below it and is not a reliable layout boundary across Phone versions).
+    UIView *phonePad = AxsDialPart(controller, @"phonePadView");
+    if ([phonePad isKindOfClass:[UIView class]]) {
+        CGRect padRect = [phonePad convertRect:phonePad.bounds toView:host];
+        if (y + height > CGRectGetMinY(padRect) - 2.0)
+            y = CGRectGetMinY(lcdRect) - height - 4.0;
     }
-    if (y < 0.0 || y + height > CGRectGetHeight(host.bounds)) {
+    if (y < 0.0 || y + height > CGRectGetHeight(host.bounds) ||
+        CGRectGetWidth(host.bounds) <= inset * 2.0) {
         bar.hidden = YES;
         return;
     }
-    bar.frame = CGRectMake(inset, y, MAX(0.0, CGRectGetWidth(host.bounds) - inset * 2.0), height);
-    id scroll = objc_getAssociatedObject(controller, &AxsDialT9ScrollKey);
-    if ([scroll isKindOfClass:[UIScrollView class]]) ((UIScrollView *)scroll).frame = bar.bounds;
+    bar.frame = CGRectMake(inset, y, CGRectGetWidth(host.bounds) - inset * 2.0, height);
+    UIScrollView *scroll = objc_getAssociatedObject(controller, &AxsDialT9ScrollKey);
+    if ([scroll isKindOfClass:[UIScrollView class]]) scroll.frame = bar.bounds;
+
+    NSArray *results = objc_getAssociatedObject(controller, &AxsDialT9ResultsKey);
+    NSString *query = objc_getAssociatedObject(controller, &AxsDialT9QueryKey);
+    BOOL suppressed = [objc_getAssociatedObject(controller, &AxsDialT9SuppressedKey) boolValue];
+    BOOL visible = AxsDialApplicationActive && AxsDialT9Enabled() && !suppressed && query.length > 0 && results.count > 0 &&
+                   [controller isViewLoaded] && ((UIViewController *)controller).view.window != nil;
+    bar.hidden = !visible;
+    if (visible) [host bringSubviewToFront:bar];
 }
 
 static void AxsDialShowCandidates(id controller, NSArray *candidates) {
@@ -490,6 +537,7 @@ static void AxsDialShowCandidates(id controller, NSArray *candidates) {
         [scroll addSubview:button];
     }];
     scroll.contentSize = CGSizeMake(safeCandidates.count ? safeCandidates.count * (buttonWidth + gap) - gap : 0.0, 38.0);
+    NSLog(@"[SpringTwelve:T9] candidateCount=%lu", (unsigned long)safeCandidates.count);
     bar.hidden = !AxsDialT9Enabled() || safeCandidates.count == 0;
     AxsDialLayoutT9Bar(controller);
     if (!bar.hidden) [dialerView bringSubviewToFront:bar];
@@ -516,12 +564,30 @@ static void AxsDialRefreshT9(id controller) {
         return;
     }
 
+    if (!AxsDialApplicationActive) {
+        UIView *bar = objc_getAssociatedObject(controller, &AxsDialT9BarKey);
+        bar.hidden = YES;
+        return;
+    }
+    if ([objc_getAssociatedObject(controller, &AxsDialT9SuppressedKey) boolValue]) {
+        UIView *bar = objc_getAssociatedObject(controller, &AxsDialT9BarKey);
+        bar.hidden = YES;
+        return;
+    }
     id lcdView = AxsDialPart(controller, @"lcdView");
     AxsDialEnsureT9Observer(controller, lcdView);
     NSString *text = AxsDialGet(lcdView, @"text");
     NSString *digits = AxsDialASCIIOnlyDigits(text);
     NSString *previous = objc_getAssociatedObject(controller, &AxsDialT9QueryKey);
-    if ([previous isEqualToString:digits]) return;
+    BOOL forced = [objc_getAssociatedObject(controller, &AxsDialT9ForceRetryKey) boolValue];
+    if ([previous isEqualToString:digits] && !forced) return;
+    objc_setAssociatedObject(controller, &AxsDialT9ForceRetryKey, @NO,
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (![previous isEqualToString:digits]) {
+        objc_setAssociatedObject(controller, &AxsDialT9RetryCountKey, @0,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    NSLog(@"[SpringTwelve:T9] input changed digitsLength=%lu", (unsigned long)digits.length);
 
     NSUInteger generation = [objc_getAssociatedObject(controller, &AxsDialT9GenerationKey) unsignedIntegerValue] + 1;
     objc_setAssociatedObject(controller, &AxsDialT9GenerationKey, @(generation),
@@ -535,12 +601,34 @@ static void AxsDialRefreshT9(id controller) {
     AxsDialShowCandidates(controller, @[]);
 
     __weak id weakController = controller;
-    AxsDialLoadContacts(^(NSArray *contacts) {
+    AxsDialLoadContacts(^(NSArray *contacts, BOOL loaded) {
+        id requestController = weakController;
+        if (!requestController) return;
+        if (!loaded) {
+            NSUInteger retryCount = [objc_getAssociatedObject(requestController, &AxsDialT9RetryCountKey) unsignedIntegerValue] + 1;
+            objc_setAssociatedObject(requestController, &AxsDialT9RetryCountKey, @(retryCount), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            NSLog(@"[SpringTwelve:T9] contact load failed retry=%lu/2", (unsigned long)retryCount);
+            if (retryCount > 2) return;
+            __weak id retryController = weakController;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                id currentController = retryController;
+                if (!currentController || !AxsDialT9Enabled() || !AxsDialApplicationActive ||
+                    [objc_getAssociatedObject(currentController, &AxsDialT9SuppressedKey) boolValue]) return;
+                NSUInteger currentGeneration = [objc_getAssociatedObject(currentController, &AxsDialT9GenerationKey) unsignedIntegerValue];
+                if (currentGeneration != generation) return;
+                objc_setAssociatedObject(currentController, &AxsDialT9ForceRetryKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                AxsDialRefreshT9(currentController);
+            });
+            return;
+        }
+        if (!AxsDialApplicationActive) return;
+        objc_setAssociatedObject(weakController, &AxsDialT9RetryCountKey, @0, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
             NSArray *results = AxsDialFindCandidates(contacts, digits);
             dispatch_async(dispatch_get_main_queue(), ^{
                 id strongController = weakController;
-                if (!strongController || !AxsDialT9Enabled()) return;
+                if (!strongController || !AxsDialApplicationActive || !AxsDialT9Enabled() ||
+                    [objc_getAssociatedObject(strongController, &AxsDialT9SuppressedKey) boolValue]) return;
                 NSUInteger current = [objc_getAssociatedObject(strongController, &AxsDialT9GenerationKey) unsignedIntegerValue];
                 if (current != generation) return;
                 AxsDialShowCandidates(strongController, results);
@@ -581,6 +669,7 @@ static void AxsDialRefreshLater(id controller) {
 
 - (void)viewDidLoad {
     %orig;
+    if (AxsDialControllers) [AxsDialControllers addObject:self];
     __weak id weakController = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         id controller = weakController;
@@ -599,8 +688,25 @@ static void AxsDialRefreshLater(id controller) {
     AxsDialLayoutT9Bar(self);
 }
 
+- (void)viewWillAppear:(BOOL)animated {
+    %orig(animated);
+    objc_setAssociatedObject(self, &AxsDialT9SuppressedKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, &AxsDialT9QueryKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    AxsDialRefreshT9(self);
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    %orig(animated);
+    objc_setAssociatedObject(self, &AxsDialT9SuppressedKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(self, &AxsDialT9QueryKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    AxsDialRefreshT9(self);
+}
+
 - (void)viewWillDisappear:(BOOL)animated {
     %orig(animated);
+    objc_setAssociatedObject(self, &AxsDialT9SuppressedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    NSUInteger generation = [objc_getAssociatedObject(self, &AxsDialT9GenerationKey) unsignedIntegerValue] + 1;
+    objc_setAssociatedObject(self, &AxsDialT9GenerationKey, @(generation), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     AxsDialShowCandidates(self, @[]);
 }
 
@@ -688,21 +794,66 @@ static void AxsSpringTwelveDialInstall(void) {
     Class dialerClass = NSClassFromString(@"DialerController");
     SEL loadSelector = @selector(viewDidLoad);
     SEL layoutSelector = @selector(viewDidLayoutSubviews);
-    if (!dialerClass || !class_getInstanceMethod(dialerClass, loadSelector) ||
-        !class_getInstanceMethod(dialerClass, layoutSelector)) return;
+    if (!dialerClass) {
+        NSLog(@"[SpringTwelve:T9] DialerController missing");
+        return;
+    }
+    if (!class_getInstanceMethod(dialerClass, loadSelector) ||
+        !class_getInstanceMethod(dialerClass, layoutSelector)) {
+        NSLog(@"[SpringTwelve:T9] required lifecycle selector missing");
+        return;
+    }
 
     %init(AxsSpringTwelveDialGroup);
     AxsSpringTwelveDialInstalled = YES;
 
     SEL textChanged = NSSelectorFromString(@"dialerViewTextDidChange:");
-    if (AxsDialMethodHasSignature(dialerClass, textChanged, 3, YES, NO))
-        %init(AxsSpringTwelveDialTextGroup);
+    BOOL hasTextChanged = AxsDialMethodHasSignature(dialerClass, textChanged, 3, YES, NO);
+    if (hasTextChanged) %init(AxsSpringTwelveDialTextGroup);
     SEL append = NSSelectorFromString(@"phonePad:appendString:playDTMFTone:");
-    if (AxsDialMethodHasSignature(dialerClass, append, 5, NO, YES))
-        %init(AxsSpringTwelveDialAppendGroup);
+    BOOL hasAppend = AxsDialMethodHasSignature(dialerClass, append, 5, NO, YES);
+    if (hasAppend) %init(AxsSpringTwelveDialAppendGroup);
     SEL deleteDigit = NSSelectorFromString(@"phonePadDeleteLastDigit:");
-    if (AxsDialMethodHasSignature(dialerClass, deleteDigit, 3, YES, NO))
-        %init(AxsSpringTwelveDialDeleteGroup);
+    BOOL hasDelete = AxsDialMethodHasSignature(dialerClass, deleteDigit, 3, YES, NO);
+    if (hasDelete) %init(AxsSpringTwelveDialDeleteGroup);
+    NSLog(@"[SpringTwelve:T9] hooks installed class=%@ text=%d append=%d delete=%d",
+          NSStringFromClass(dialerClass), hasTextChanged, hasAppend, hasDelete);
+}
+
+static void AxsDialPreferencesChanged(void) {
+    if (!NSThread.isMainThread) {
+        dispatch_async(dispatch_get_main_queue(), ^{ AxsDialPreferencesChanged(); });
+        return;
+    }
+    for (id controller in AxsDialControllers.allObjects) {
+        objc_setAssociatedObject(controller, &AxsDialT9QueryKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        NSUInteger generation = [objc_getAssociatedObject(controller, &AxsDialT9GenerationKey) unsignedIntegerValue] + 1;
+        objc_setAssociatedObject(controller, &AxsDialT9GenerationKey, @(generation), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        AxsDialRefreshT9(controller);
+        AxsDialLayoutT9Bar(controller);
+    }
+}
+
+static void AxsDialApplicationWillResignActive(void) {
+    AxsDialApplicationActive = NO;
+    for (id controller in AxsDialControllers.allObjects) {
+        NSUInteger generation = [objc_getAssociatedObject(controller, &AxsDialT9GenerationKey) unsignedIntegerValue] + 1;
+        objc_setAssociatedObject(controller, &AxsDialT9GenerationKey, @(generation), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        AxsDialShowCandidates(controller, @[]);
+    }
+    NSLog(@"[SpringTwelve:T9] app inactive; suggestions hidden");
+}
+
+static void AxsDialApplicationDidBecomeActive(void) {
+    AxsDialApplicationActive = YES;
+    NSLog(@"[SpringTwelve:T9] app active; refreshing dialer");
+    for (id controller in AxsDialControllers.allObjects) {
+        if ([objc_getAssociatedObject(controller, &AxsDialT9SuppressedKey) boolValue]) continue;
+        if (![controller isViewLoaded] || ((UIViewController *)controller).view.window == nil) continue;
+        objc_setAssociatedObject(controller, &AxsDialT9QueryKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &AxsDialT9RetryCountKey, @0, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        AxsDialRefreshT9(controller);
+    }
 }
 
 static void AxsSpringTwelveDialImageAdded(const struct mach_header *header, intptr_t slide) {
@@ -714,6 +865,27 @@ static void AxsSpringTwelveDialImageAdded(const struct mach_header *header, intp
 %ctor {
     CFStringRef bundleID = CFBundleGetIdentifier(CFBundleGetMainBundle());
     if (!bundleID || !CFEqual(bundleID, CFSTR("com.apple.mobilephone"))) return;
+    AxsDialControllers = [NSHashTable weakObjectsHashTable];
+    AxsDialApplicationActive = UIApplication.sharedApplication.applicationState == UIApplicationStateActive;
+    NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
+    [center addObserverForName:UIApplicationWillResignActiveNotification object:nil queue:NSOperationQueue.mainQueue
+        usingBlock:^(__unused NSNotification *note) { AxsDialApplicationWillResignActive(); }];
+    [center addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:NSOperationQueue.mainQueue
+        usingBlock:^(__unused NSNotification *note) { AxsDialApplicationDidBecomeActive(); }];
+    [center addObserverForName:@"com.axs.springtwelve.preferences-changed"
+        object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note) {
+            AxsDialPreferencesChanged();
+        }];
+    [[NSNotificationCenter defaultCenter] addObserverForName:@"CNContactStoreDidChangeNotification"
+        object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note) {
+            dispatch_async(AxsDialContactsQueue(), ^{
+                AxsDialContactCache = nil;
+                AxsDialContactCacheReady = NO;
+                AxsDialContactRetryAfter = 0.0;
+                AxsDialContactLoadStarted = NO;
+            });
+            AxsDialPreferencesChanged();
+        }];
     _dyld_register_func_for_add_image(AxsSpringTwelveDialImageAdded);
     dispatch_async(dispatch_get_main_queue(), ^{ AxsSpringTwelveDialInstall(); });
 }

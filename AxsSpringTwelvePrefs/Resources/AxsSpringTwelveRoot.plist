@@ -224,7 +224,7 @@
 			<key>default</key>
 			<false/>
 			<key>footerText</key>
-			<string>启用后在电话拨号界面按数字前缀匹配联系人，无需额外授权。</string>
+			<string>启用后在电话拨号界面按数字前缀匹配联系人；不会主动请求授权，若系统限制访问则无法匹配。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
