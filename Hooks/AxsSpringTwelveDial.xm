@@ -260,23 +260,14 @@ static void AxsDialLoadContacts(void (^completion)(NSArray *)) {
         if (AxsDialContactLoadStarted) return;
         AxsDialContactLoadStarted = YES;
 
-        // Avoid triggering the iOS privacy termination path when the host app has no usage string.
-        if (![[NSBundle mainBundle] objectForInfoDictionaryKey:@"NSContactsUsageDescription"]) {
-            AxsDialFinishContactLoad(nil);
-            return;
-        }
+        // T9 does not ask for contact permission. The Phone app is a system
+        // process that already has contacts access, so read the store directly.
+        // No authorization status check and no requestAccess prompt are used:
+        // switching T9 on is enough to make it work.
         @try {
             dlopen("/System/Library/Frameworks/Contacts.framework/Contacts", RTLD_LAZY);
             Class storeClass = NSClassFromString(@"CNContactStore");
-            SEL authSelector = NSSelectorFromString(@"authorizationStatusForEntityType:");
-            if (!storeClass || ![storeClass respondsToSelector:authSelector]) {
-                AxsDialFinishContactLoad(nil);
-                return;
-            }
-            NSInteger status = ((NSInteger (*)(id, SEL, NSInteger))objc_msgSend)(
-                storeClass, authSelector, 0 /* CNEntityTypeContacts */);
-            // CNAuthorizationStatus: notDetermined=0, restricted=1, denied=2, authorized=3.
-            if (status == 1 || status == 2) {
+            if (!storeClass) {
                 AxsDialFinishContactLoad(nil);
                 return;
             }
@@ -285,26 +276,7 @@ static void AxsDialLoadContacts(void (^completion)(NSArray *)) {
                 AxsDialFinishContactLoad(nil);
                 return;
             }
-            if (status == 0) {
-                SEL requestAccess = NSSelectorFromString(@"requestAccessForEntityType:completionHandler:");
-                if (![store respondsToSelector:requestAccess]) {
-                    AxsDialFinishContactLoad(nil);
-                    return;
-                }
-                id completionBlock = ^(BOOL granted, NSError *error) {
-                    dispatch_async(AxsDialContactsQueue(), ^{
-                        if (granted) AxsDialFetchContacts(store);
-                        else AxsDialFinishContactLoad(nil);
-                    });
-                };
-                ((void (*)(id, SEL, NSInteger, id))objc_msgSend)(
-                    store, requestAccess, 0 /* CNEntityTypeContacts */, completionBlock);
-            } else if (status >= 3) {
-                // Treat newer granted states (for example limited access) as readable.
-                AxsDialFetchContacts(store);
-            } else {
-                AxsDialFinishContactLoad(nil);
-            }
+            AxsDialFetchContacts(store);
         } @catch (__unused NSException *exception) {
             AxsDialFinishContactLoad(nil);
         }
@@ -518,7 +490,7 @@ static void AxsDialShowCandidates(id controller, NSArray *candidates) {
         [scroll addSubview:button];
     }];
     scroll.contentSize = CGSizeMake(safeCandidates.count ? safeCandidates.count * (buttonWidth + gap) - gap : 0.0, 38.0);
-    bar.hidden = safeCandidates.count == 0 || !AxsDialT9Enabled();
+    bar.hidden = !AxsDialT9Enabled() || safeCandidates.count == 0;
     AxsDialLayoutT9Bar(controller);
     if (!bar.hidden) [dialerView bringSubviewToFront:bar];
 }
