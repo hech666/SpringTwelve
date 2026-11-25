@@ -123,18 +123,19 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
     return axs_springtwelve_powerBlankPath(hit, home);
 }
 
-// Scale the previous effective size (including small-screen caps), not only
-// its preferred constants. Both cards share the exact on-screen center.
-static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIView *card, UIView *background, CGFloat originalHeight) {
-    const CGFloat widthScale = 2.0 / 3.0, heightScale = 3.0 / 4.0;
+// Both cards share the screen center; preferred dimensions are in points.
+// Keep the main menu's existing small-screen scale, allow the confirmation
+// card a slightly larger width fraction so widening also works on an iPhone.
+static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIView *card, UIView *background, CGFloat preferredWidth, CGFloat preferredHeight, CGFloat widthFraction) {
+    const CGFloat heightScale = 3.0 / 4.0;
     UILayoutGuide *safe = background.safeAreaLayoutGuide;
-    NSLayoutConstraint *width = [card.widthAnchor constraintEqualToConstant:400.0 * widthScale];
-    NSLayoutConstraint *height = [card.heightAnchor constraintEqualToConstant:originalHeight * heightScale];
+    NSLayoutConstraint *width = [card.widthAnchor constraintEqualToConstant:preferredWidth];
+    NSLayoutConstraint *height = [card.heightAnchor constraintEqualToConstant:preferredHeight];
     width.priority = height.priority = UILayoutPriorityDefaultHigh;
     return @[
         [card.centerXAnchor constraintEqualToAnchor:background.centerXAnchor],
         [card.centerYAnchor constraintEqualToAnchor:background.centerYAnchor], width, height,
-        [card.widthAnchor constraintLessThanOrEqualToAnchor:safe.widthAnchor multiplier:widthScale constant:-32.0 * widthScale],
+        [card.widthAnchor constraintLessThanOrEqualToAnchor:safe.widthAnchor multiplier:widthFraction constant:-32.0 * widthFraction],
         [card.heightAnchor constraintLessThanOrEqualToAnchor:safe.heightAnchor multiplier:heightScale constant:-24.0 * heightScale]
     ];
 }
@@ -279,7 +280,7 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
     [cancel.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
     [cancel addTarget:self action:@selector(axs_springtwelve_close) forControlEvents:UIControlEventTouchUpInside];
     [stack addArrangedSubview:cancel];
-    [NSLayoutConstraint activateConstraints:axs_springtwelve_powerCardConstraints(panel, background, 590.0)];
+    [NSLayoutConstraint activateConstraints:axs_springtwelve_powerCardConstraints(panel, background, 400.0 * 2.0 / 3.0, 590.0 * 3.0 / 4.0, 2.0 / 3.0)];
     [NSLayoutConstraint activateConstraints:@[
         [scroll.topAnchor constraintEqualToAnchor:panel.topAnchor constant:16],
         [scroll.bottomAnchor constraintEqualToAnchor:panel.bottomAnchor constant:-16],
@@ -414,7 +415,7 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
         [button.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
         [stack addArrangedSubview:button];
     }
-    [NSLayoutConstraint activateConstraints:axs_springtwelve_powerCardConstraints(card, self.view, 360.0)];
+    [NSLayoutConstraint activateConstraints:axs_springtwelve_powerCardConstraints(card, self.view, 287.0, 280.0, 0.72)];
     [NSLayoutConstraint activateConstraints:@[
         [scroll.topAnchor constraintEqualToAnchor:card.topAnchor constant:14],
         [scroll.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-14],
