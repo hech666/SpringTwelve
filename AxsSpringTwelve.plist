@@ -9,6 +9,11 @@
             <string>com.apple.springboard</string>
             <string>com.apple.mobilephone</string>
         </array>
+        <key>Executables</key>
+        <array>
+            <string>druid</string>
+            <string>pasted</string>
+        </array>
     </dict>
 </dict>
 </plist>

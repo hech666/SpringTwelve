@@ -218,6 +218,26 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
+			<string>粘贴权限</string>
+			<key>footerText</key>
+			<string>开启后自动允许粘贴并屏蔽提示，应用可能不经询问读取剪贴板。关闭后恢复系统行为，已完成的授权不会撤销。首次安装需让粘贴服务重新载入插件；必要时手动重启用户空间。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>屏蔽粘贴提示并允许</string>
+			<key>key</key>
+			<string>allowPasteWithoutPrompt</string>
+			<key>defaults</key>
+			<string>com.axs.springtwelve</string>
+			<key>default</key>
+			<false/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
 			<string>SpringTwelve 通话工具</string>
 			<key>footerText</key>
 			<string>录音功能需遵守当地法律并确保已取得通话参与者同意。启用自动录音后，系统在蜂窝通话接通时开始采集，屏幕会持续显示红色“录音中”提示；挂断后停止并整理文件。</string>
@@ -249,6 +269,34 @@
 			<false/>
 			<key>footerText</key>
 			<string>启用后在电话拨号界面按数字前缀匹配联系人；不会主动请求授权，若系统限制访问则无法匹配。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>禁用电话 App 个人收藏标签</string>
+			<key>key</key>
+			<string>disablePhoneFavoritesTab</string>
+			<key>defaults</key>
+			<string>com.axs.springtwelve</string>
+			<key>default</key>
+			<false/>
+			<key>footerText</key>
+			<string>更改后请完全结束并重新打开电话 App。与录音列表替换同一标签同时开启时，隐藏优先。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>禁用电话 App 语音留言标签</string>
+			<key>key</key>
+			<string>disablePhoneVoicemailTab</string>
+			<key>defaults</key>
+			<string>com.axs.springtwelve</string>
+			<key>default</key>
+			<false/>
+			<key>footerText</key>
+			<string>更改后请完全结束并重新打开电话 App。与录音列表替换同一标签同时开启时，隐藏优先。</string>
 		</dict>
 		<dict>
 			<key>cell</key>

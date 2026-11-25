@@ -123,9 +123,8 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
     return axs_springtwelve_powerBlankPath(hit, home);
 }
 
-// Both cards share the screen center; preferred dimensions are in points.
-// Keep the main menu's existing small-screen scale, allow the confirmation
-// card a slightly larger width fraction so widening also works on an iPhone.
+// Preserve the main menu's existing centered dimensions and small-screen caps.
+// Confirmation uses UIAlertController and never shares these size constraints.
 static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIView *card, UIView *background, CGFloat preferredWidth, CGFloat preferredHeight, CGFloat widthFraction) {
     const CGFloat heightScale = 3.0 / 4.0;
     UILayoutGuide *safe = background.safeAreaLayoutGuide;
@@ -150,7 +149,7 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
 @property(nonatomic) NSInteger axs_springtwelve_pendingAction;
 @property(nonatomic) BOOL axs_springtwelve_closing;
 @property(nonatomic) BOOL axs_springtwelve_executing;
-@property(nonatomic, strong) UIView *axs_springtwelve_confirmation;
+@property(nonatomic, strong) UIAlertController *axs_springtwelve_confirmation;
 @property(nonatomic, strong) NSUUID *axs_springtwelve_confirmationToken;
 - (void)axs_springtwelve_close;
 - (void)axs_springtwelve_confirm:(UIButton *)sender;
@@ -158,8 +157,8 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
 
 @implementation AxsSpringTwelvePowerMenuController
 - (BOOL)axs_springtwelve_contextValid {
-    // The confirmation card stays inside this window: no modal/key transition
-    // is part of authorization. Any actual key loss invalidates the request.
+    // Present the system alert from this overlay's root controller. A real
+    // key-window loss or background transition still revokes authorization.
     UIWindow *overlay = self.axs_springtwelve_overlay;
     return !self.axs_springtwelve_closing && AxsSpringTwelvePowerMenuActive == self &&
         overlay && !overlay.hidden && overlay.isKeyWindow &&
@@ -174,7 +173,7 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
     self.axs_springtwelve_confirmationToken = nil;
     [NSNotificationCenter.defaultCenter removeObserver:self];
     if (AxsSpringTwelvePowerMenuActive == self) AxsSpringTwelvePowerMenuActive = nil;
-    [self.axs_springtwelve_confirmation removeFromSuperview];
+    [self.axs_springtwelve_confirmation dismissViewControllerAnimated:NO completion:nil];
     self.axs_springtwelve_confirmation = nil;
     UIWindow *overlay = self.axs_springtwelve_overlay;
     BOOL restoreKey = overlay.isKeyWindow;
@@ -304,7 +303,7 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
 - (void)axs_springtwelve_cancelConfirmation {
     self.axs_springtwelve_confirmationToken = nil;
     self.axs_springtwelve_pendingAction = 0;
-    [self.axs_springtwelve_confirmation removeFromSuperview];
+    [self.axs_springtwelve_confirmation dismissViewControllerAnimated:NO completion:nil];
     self.axs_springtwelve_confirmation = nil;
     self.axs_springtwelve_menuPanel.hidden = NO;
     UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, self.axs_springtwelve_menuPanel);
@@ -318,73 +317,59 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
 
 - (void)axs_springtwelve_confirm:(UIButton *)sender {
     if (![self axs_springtwelve_contextValid]) { [self axs_springtwelve_close]; return; }
-    if (self.axs_springtwelve_confirmation || self.axs_springtwelve_pendingAction || self.axs_springtwelve_executing) return;
+    if (self.axs_springtwelve_confirmation || self.presentedViewController ||
+        self.axs_springtwelve_pendingAction || self.axs_springtwelve_executing) return;
     AxsSpringTwelvePowerAction selected = (AxsSpringTwelvePowerAction)sender.tag;
     if (!axs_springtwelve_powerActionAvailable(selected)) {
         [self axs_springtwelve_setStatus:@"此操作所需的系统接口或提权工具当前不可用，请检查安装后重新打开面板。"];
         return;
     }
     NSUUID *token = NSUUID.UUID;
-    UIView *card = [UIView new];
-    card.backgroundColor = UIColor.secondarySystemBackgroundColor;
-    card.layer.cornerRadius = 18.0;
-    card.clipsToBounds = YES;
-    card.translatesAutoresizingMaskIntoConstraints = NO;
-    self.axs_springtwelve_confirmation = card;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:
+        [@"确认：" stringByAppendingString:axs_springtwelve_powerActionTitle(selected)]
+        message:axs_springtwelve_powerActionWarning(selected)
+        preferredStyle:UIAlertControllerStyleAlert];
+    self.axs_springtwelve_confirmation = alert;
     self.axs_springtwelve_confirmationToken = token;
     self.axs_springtwelve_pendingAction = selected;
     self.axs_springtwelve_menuPanel.hidden = YES;
-    [self.view addSubview:card];
-    UIScrollView *scroll = [UIScrollView new];
-    scroll.translatesAutoresizingMaskIntoConstraints = NO;
-    [card addSubview:scroll];
-    UIStackView *stack = [UIStackView new];
-    stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 8;
-    stack.translatesAutoresizingMaskIntoConstraints = NO;
-    [scroll addSubview:stack];
-    UILabel *heading = [UILabel new];
-    heading.text = [@"确认：" stringByAppendingString:axs_springtwelve_powerActionTitle(selected)];
-    heading.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
-    heading.adjustsFontForContentSizeCategory = YES;
-    heading.numberOfLines = 0;
-    heading.textAlignment = NSTextAlignmentCenter;
-    [stack addArrangedSubview:heading];
-    UILabel *message = [UILabel new];
-    message.text = axs_springtwelve_powerActionWarning(selected);
-    message.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
-    message.adjustsFontForContentSizeCategory = YES;
-    message.numberOfLines = 0;
-    [stack addArrangedSubview:message];
     __weak AxsSpringTwelvePowerMenuController *weakSelf = self;
-    UIButton *cancel = [UIButton buttonWithType:UIButtonTypeSystem];
-    [cancel setTitle:@"取消" forState:UIControlStateNormal];
-    [cancel addAction:[UIAction actionWithHandler:^(__unused UIAction *event) {
+    __weak UIAlertController *weakAlert = alert;
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel
+        handler:^(__unused UIAlertAction *action) {
         AxsSpringTwelvePowerMenuController *controller = weakSelf;
         if (!controller || controller.axs_springtwelve_closing ||
             controller.axs_springtwelve_confirmationToken != token ||
             controller.axs_springtwelve_pendingAction != selected) return;
-        [controller axs_springtwelve_cancelConfirmation];
+        // UIKit manages dismissal for the selected system alert action.
+        controller.axs_springtwelve_confirmationToken = nil;
+        controller.axs_springtwelve_pendingAction = 0;
+        controller.axs_springtwelve_confirmation = nil;
+        controller.axs_springtwelve_menuPanel.hidden = NO;
         axs_springtwelve_powerLog(@"confirmation-cancelled");
-    }] forControlEvents:UIControlEventTouchUpInside];
-    UIButton *confirm = [UIButton buttonWithType:UIButtonTypeSystem];
-    [confirm setTitle:@"确认执行" forState:UIControlStateNormal];
-    [confirm setTitleColor:UIColor.systemRedColor forState:UIControlStateNormal];
-    [confirm addAction:[UIAction actionWithHandler:^(__unused UIAction *event) {
+        }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"确认执行" style:UIAlertActionStyleDestructive
+        handler:^(__unused UIAlertAction *action) {
         AxsSpringTwelvePowerMenuController *controller = weakSelf;
         // A stale event must not clear or close a newer request.
         if (!controller || controller.axs_springtwelve_closing ||
             controller.axs_springtwelve_confirmationToken != token ||
             controller.axs_springtwelve_pendingAction != selected) return;
-        BOOL authorized = [controller axs_springtwelve_contextValid] &&
-            controller.axs_springtwelve_confirmation.superview == controller.view &&
-            !controller.axs_springtwelve_confirmation.hidden;
-        [controller axs_springtwelve_cancelConfirmation];
+        UIAlertController *activeAlert = weakAlert;
+        BOOL authorized = [controller axs_springtwelve_contextValid] && activeAlert &&
+            controller.axs_springtwelve_confirmation == activeAlert &&
+            controller.view.window == controller.axs_springtwelve_overlay;
         if (!authorized) {
             axs_springtwelve_powerLog(@"confirmation-rejected");
             [controller axs_springtwelve_close]; return;
         }
+        // Consume the one-shot authorization before submitting. UIKit owns
+        // dismissal; do not race its automatic dismissal with another call.
+        controller.axs_springtwelve_confirmationToken = nil;
+        controller.axs_springtwelve_pendingAction = 0;
+        controller.axs_springtwelve_confirmation = nil;
         controller.axs_springtwelve_executing = YES;
+        controller.axs_springtwelve_menuPanel.hidden = NO;
         [controller axs_springtwelve_setStatus:@"正在提交操作，请勿重复点击。"];
         NSDictionary<NSNumber *, NSString *> *events = @{
             @(AxsSpringTwelvePowerActionQuickRespring): @"quick-respring-request",
@@ -408,27 +393,13 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
             }
             UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, live.axs_springtwelve_status.text);
         });
-    }] forControlEvents:UIControlEventTouchUpInside];
-    for (UIButton *button in @[confirm, cancel]) {
-        button.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
-        button.titleLabel.adjustsFontForContentSizeCategory = YES;
-        [button.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
-        [stack addArrangedSubview:button];
-    }
-    [NSLayoutConstraint activateConstraints:axs_springtwelve_powerCardConstraints(card, self.view, 287.0, 280.0, 0.72)];
-    [NSLayoutConstraint activateConstraints:@[
-        [scroll.topAnchor constraintEqualToAnchor:card.topAnchor constant:14],
-        [scroll.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-14],
-        [scroll.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
-        [scroll.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
-        [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor],
-        [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor],
-        [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor],
-        [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor],
-        [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor]
-    ]];
-    axs_springtwelve_powerLog(@"confirmation-presented");
-    UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, heading);
+        }]];
+    [self presentViewController:alert animated:YES completion:^{
+        AxsSpringTwelvePowerMenuController *controller = weakSelf;
+        if (controller.axs_springtwelve_confirmationToken == token &&
+            ![controller axs_springtwelve_contextValid]) [controller axs_springtwelve_close];
+    }];
+    axs_springtwelve_powerLog(@"system-confirmation-presented");
 }
 
 @end
