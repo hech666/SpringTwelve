@@ -123,36 +123,24 @@ static BOOL axs_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
     return axs_springtwelve_powerBlankPath(hit, home);
 }
 
-// Preserve the main menu's existing centered dimensions and small-screen caps.
-// Confirmation uses UIAlertController and never shares these size constraints.
-static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIView *card, UIView *background, CGFloat preferredWidth, CGFloat preferredHeight, CGFloat widthFraction) {
-    const CGFloat heightScale = 3.0 / 4.0;
-    UILayoutGuide *safe = background.safeAreaLayoutGuide;
-    NSLayoutConstraint *width = [card.widthAnchor constraintEqualToConstant:preferredWidth];
-    NSLayoutConstraint *height = [card.heightAnchor constraintEqualToConstant:preferredHeight];
-    width.priority = height.priority = UILayoutPriorityDefaultHigh;
-    return @[
-        [card.centerXAnchor constraintEqualToAnchor:background.centerXAnchor],
-        [card.centerYAnchor constraintEqualToAnchor:background.centerYAnchor], width, height,
-        [card.widthAnchor constraintLessThanOrEqualToAnchor:safe.widthAnchor multiplier:widthFraction constant:-32.0 * widthFraction],
-        [card.heightAnchor constraintLessThanOrEqualToAnchor:safe.heightAnchor multiplier:heightScale constant:-24.0 * heightScale]
-    ];
-}
-
 @interface AxsSpringTwelvePowerMenuController : UIViewController
 @property(nonatomic, weak) UIView *axs_springtwelve_home;
 @property(nonatomic, weak) UIWindow *axs_springtwelve_homeWindow;
 @property(nonatomic, weak) UIWindow *axs_springtwelve_previousWindow;
 @property(nonatomic, strong) UIWindow *axs_springtwelve_overlay;
-@property(nonatomic, strong) UIView *axs_springtwelve_menuPanel;
-@property(nonatomic, strong) UILabel *axs_springtwelve_status;
+@property(nonatomic, strong) UIAlertController *axs_springtwelve_menu;
+@property(nonatomic, copy) NSString *axs_springtwelve_statusMessage;
+@property(nonatomic, strong) NSUUID *axs_springtwelve_transitionToken;
+@property(nonatomic) BOOL axs_springtwelve_started;
 @property(nonatomic) NSInteger axs_springtwelve_pendingAction;
 @property(nonatomic) BOOL axs_springtwelve_closing;
 @property(nonatomic) BOOL axs_springtwelve_executing;
 @property(nonatomic, strong) UIAlertController *axs_springtwelve_confirmation;
 @property(nonatomic, strong) NSUUID *axs_springtwelve_confirmationToken;
 - (void)axs_springtwelve_close;
-- (void)axs_springtwelve_confirm:(UIButton *)sender;
+- (void)axs_springtwelve_showMenu;
+- (void)axs_springtwelve_confirmAction:(AxsSpringTwelvePowerAction)selected;
+- (void)axs_springtwelve_presentConfirmation:(AxsSpringTwelvePowerAction)selected token:(NSUUID *)token;
 @end
 
 @implementation AxsSpringTwelvePowerMenuController
@@ -173,7 +161,9 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
     self.axs_springtwelve_confirmationToken = nil;
     [NSNotificationCenter.defaultCenter removeObserver:self];
     if (AxsSpringTwelvePowerMenuActive == self) AxsSpringTwelvePowerMenuActive = nil;
-    [self.axs_springtwelve_confirmation dismissViewControllerAnimated:NO completion:nil];
+    self.axs_springtwelve_transitionToken = nil;
+    [self dismissViewControllerAnimated:NO completion:nil];
+    self.axs_springtwelve_menu = nil;
     self.axs_springtwelve_confirmation = nil;
     UIWindow *overlay = self.axs_springtwelve_overlay;
     BOOL restoreKey = overlay.isKeyWindow;
@@ -200,113 +190,122 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
 
 - (void)loadView {
     UIView *background = [UIView new];
-    background.backgroundColor = [UIColor colorWithWhite:0 alpha:0.45];
-    self.view = background;
-    UIView *panel = [UIView new];
-    panel.backgroundColor = UIColor.secondarySystemBackgroundColor;
-    panel.layer.cornerRadius = 18.0;
-    panel.clipsToBounds = YES;
-    panel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.axs_springtwelve_menuPanel = panel;
-    [background addSubview:panel];
-    UIScrollView *scroll = [UIScrollView new];
-    scroll.translatesAutoresizingMaskIntoConstraints = NO;
-    [panel addSubview:scroll];
-    UIStackView *stack = [UIStackView new];
-    stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 6.0;
-    stack.translatesAutoresizingMaskIntoConstraints = NO;
-    [scroll addSubview:stack];
-    UILabel *title = [UILabel new];
-    title.text = @"桌面电源菜单";
-    title.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
-    title.adjustsFontForContentSizeCategory = YES;
-    title.numberOfLines = 0;
-    title.textAlignment = NSTextAlignmentCenter;
-    [stack addArrangedSubview:title];
-    UILabel *status = [UILabel new];
-    // No introductory text or reserved blank space. Reveal only live results.
-    status.hidden = YES;
-    status.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
-    status.adjustsFontForContentSizeCategory = YES;
-    status.numberOfLines = 0;
-    status.textAlignment = NSTextAlignmentCenter;
-    self.axs_springtwelve_status = status;
-    [stack addArrangedSubview:status];
-    UIStackView *actions = [UIStackView new];
-    actions.axis = UILayoutConstraintAxisVertical;
-    actions.distribution = UIStackViewDistributionFillEqually;
-    [actions setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisVertical];
-    [stack addArrangedSubview:actions];
-    NSArray<NSNumber *> *selections = @[@(AxsSpringTwelvePowerActionQuickRespring),
-        @(AxsSpringTwelvePowerActionForceRespring), @(AxsSpringTwelvePowerActionRespring),
-        @(AxsSpringTwelvePowerActionUserspaceReboot), @(AxsSpringTwelvePowerActionReboot),
-        @(AxsSpringTwelvePowerActionShutdown)];
-    for (NSNumber *selection in selections) {
-        AxsSpringTwelvePowerAction action = (AxsSpringTwelvePowerAction)selection.integerValue;
-        UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-        BOOL available = axs_springtwelve_powerActionAvailable(action);
-        NSString *title = axs_springtwelve_powerActionTitle(action);
-        if (!available) title = [title stringByAppendingString:@" — 当前环境不可用"];
-        [button setTitle:title forState:UIControlStateNormal];
-        button.titleLabel.numberOfLines = 0;
-        button.titleLabel.textAlignment = NSTextAlignmentCenter;
-        button.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
-        button.titleLabel.adjustsFontForContentSizeCategory = YES;
-        button.enabled = available;
-        button.tag = action;
-        [button setTitleColor:UIColor.systemRedColor forState:UIControlStateNormal];
-        [button addTarget:self action:@selector(axs_springtwelve_confirm:) forControlEvents:UIControlEventTouchUpInside];
-        [button.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
-        [actions addArrangedSubview:button];
-        UIView *divider = [UIView new];
-        divider.backgroundColor = UIColor.separatorColor;
-        divider.userInteractionEnabled = NO;
-        divider.isAccessibilityElement = NO;
-        divider.translatesAutoresizingMaskIntoConstraints = NO;
-        [button addSubview:divider];
-        [NSLayoutConstraint activateConstraints:@[
-            [divider.heightAnchor constraintEqualToConstant:0.5],
-            [divider.leadingAnchor constraintEqualToAnchor:button.leadingAnchor constant:4],
-            [divider.trailingAnchor constraintEqualToAnchor:button.trailingAnchor constant:-4],
-            [divider.bottomAnchor constraintEqualToAnchor:button.bottomAnchor]
-        ]];
-    }
-    UIButton *cancel = [UIButton buttonWithType:UIButtonTypeSystem];
-    [cancel setTitle:@"取消" forState:UIControlStateNormal];
-    cancel.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
-    cancel.titleLabel.adjustsFontForContentSizeCategory = YES;
-    [cancel.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
-    [cancel addTarget:self action:@selector(axs_springtwelve_close) forControlEvents:UIControlEventTouchUpInside];
-    [stack addArrangedSubview:cancel];
-    [NSLayoutConstraint activateConstraints:axs_springtwelve_powerCardConstraints(panel, background, 400.0 * 2.0 / 3.0, 590.0 * 3.0 / 4.0, 2.0 / 3.0)];
-    [NSLayoutConstraint activateConstraints:@[
-        [scroll.topAnchor constraintEqualToAnchor:panel.topAnchor constant:16],
-        [scroll.bottomAnchor constraintEqualToAnchor:panel.bottomAnchor constant:-16],
-        [scroll.leadingAnchor constraintEqualToAnchor:panel.leadingAnchor constant:16],
-        [scroll.trailingAnchor constraintEqualToAnchor:panel.trailingAnchor constant:-16],
-        [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor],
-        [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor],
-        [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor],
-        [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor],
-        [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor],
-        [stack.heightAnchor constraintGreaterThanOrEqualToAnchor:scroll.frameLayoutGuide.heightAnchor]
-    ]];
+    background.backgroundColor = UIColor.clearColor;
     background.accessibilityViewIsModal = YES;
+    self.view = background;
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    if (self.axs_springtwelve_started) return;
+    self.axs_springtwelve_started = YES;
+    [self axs_springtwelve_showMenu];
+}
+
+// UIAlertAction owns automatic dismissal. Never present its successor inside
+// the action handler: wait for UIKit to release the old presentation. This
+// bounded, revocable UI-only retry cannot submit a device action.
+- (void)axs_springtwelve_presentWhenReady:(void (^)(void))presentation
+                                  ticket:(NSUUID *)ticket attempt:(NSUInteger)attempt {
+    if (self.axs_springtwelve_transitionToken != ticket || self.axs_springtwelve_closing) return;
+    if (![self axs_springtwelve_contextValid]) { [self axs_springtwelve_close]; return; }
+    if (!self.presentedViewController && !self.transitionCoordinator && self.view.window) {
+        self.axs_springtwelve_transitionToken = nil;
+        presentation();
+        return;
+    }
+    if (attempt >= 60) {
+        axs_springtwelve_powerLog(@"system-alert-transition-timeout");
+        [self axs_springtwelve_close];
+        return;
+    }
+    __weak AxsSpringTwelvePowerMenuController *weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [weakSelf axs_springtwelve_presentWhenReady:presentation ticket:ticket attempt:attempt + 1];
+    });
+}
+
+- (void)axs_springtwelve_queuePresentation:(void (^)(void))presentation {
+    NSUUID *ticket = NSUUID.UUID;
+    self.axs_springtwelve_transitionToken = ticket;
+    __weak AxsSpringTwelvePowerMenuController *weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [weakSelf axs_springtwelve_presentWhenReady:presentation ticket:ticket attempt:0];
+    });
+}
+
+- (void)axs_springtwelve_showMenu {
+    __weak AxsSpringTwelvePowerMenuController *weakSelf = self;
+    [self axs_springtwelve_queuePresentation:^{
+        AxsSpringTwelvePowerMenuController *controller = weakSelf;
+        if (!controller || controller.axs_springtwelve_pendingAction || controller.axs_springtwelve_confirmation) return;
+        UIAlertController *menu = [UIAlertController alertControllerWithTitle:@"桌面电源菜单"
+            message:controller.axs_springtwelve_statusMessage preferredStyle:UIAlertControllerStyleAlert];
+        controller.axs_springtwelve_menu = menu;
+        __weak UIAlertController *weakMenu = menu;
+        NSArray<NSNumber *> *selections = @[@(AxsSpringTwelvePowerActionQuickRespring),
+            @(AxsSpringTwelvePowerActionForceRespring), @(AxsSpringTwelvePowerActionRespring),
+            @(AxsSpringTwelvePowerActionUserspaceReboot), @(AxsSpringTwelvePowerActionReboot),
+            @(AxsSpringTwelvePowerActionShutdown)];
+        for (NSNumber *selection in selections) {
+            AxsSpringTwelvePowerAction selected = (AxsSpringTwelvePowerAction)selection.integerValue;
+            BOOL available = axs_springtwelve_powerActionAvailable(selected);
+            NSString *title = axs_springtwelve_powerActionTitle(selected);
+            if (!available) title = [title stringByAppendingString:@" — 当前环境不可用"];
+            UIAlertAction *item = [UIAlertAction actionWithTitle:title style:UIAlertActionStyleDestructive
+                handler:^(__unused UIAlertAction *action) {
+                AxsSpringTwelvePowerMenuController *live = weakSelf;
+                UIAlertController *activeMenu = weakMenu;
+                if (!live || !activeMenu || live.axs_springtwelve_menu != activeMenu ||
+                    live.axs_springtwelve_pendingAction || live.axs_springtwelve_executing) return;
+                if (![live axs_springtwelve_contextValid]) { [live axs_springtwelve_close]; return; }
+                live.axs_springtwelve_menu = nil;
+                [live axs_springtwelve_confirmAction:selected];
+            }];
+            item.enabled = available && !controller.axs_springtwelve_executing;
+            [menu addAction:item];
+        }
+        [menu addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel
+            handler:^(__unused UIAlertAction *action) {
+            AxsSpringTwelvePowerMenuController *live = weakSelf;
+            UIAlertController *activeMenu = weakMenu;
+            if (live && activeMenu && !live.axs_springtwelve_closing &&
+                live.axs_springtwelve_menu == activeMenu) [live axs_springtwelve_close];
+        }]];
+        [controller presentViewController:menu animated:YES completion:^{
+            AxsSpringTwelvePowerMenuController *live = weakSelf;
+            if (live && ![live axs_springtwelve_contextValid]) [live axs_springtwelve_close];
+        }];
+        axs_springtwelve_powerLog(@"system-menu-presented");
+    }];
 }
 
 - (void)axs_springtwelve_setStatus:(NSString *)message {
-    self.axs_springtwelve_status.text = message;
-    self.axs_springtwelve_status.hidden = message.length == 0;
+    self.axs_springtwelve_statusMessage = message;
+    UIAlertController *menu = self.axs_springtwelve_menu;
+    if (menu && self.presentedViewController == menu) {
+        menu.message = message;
+        NSArray<NSNumber *> *selections = @[@(AxsSpringTwelvePowerActionQuickRespring),
+            @(AxsSpringTwelvePowerActionForceRespring), @(AxsSpringTwelvePowerActionRespring),
+            @(AxsSpringTwelvePowerActionUserspaceReboot), @(AxsSpringTwelvePowerActionReboot),
+            @(AxsSpringTwelvePowerActionShutdown)];
+        for (NSUInteger i = 0; i < selections.count && i < menu.actions.count; i++) {
+            menu.actions[i].enabled = !self.axs_springtwelve_executing &&
+                axs_springtwelve_powerActionAvailable((AxsSpringTwelvePowerAction)selections[i].integerValue);
+        }
+    } else if (!self.axs_springtwelve_pendingAction && !self.axs_springtwelve_confirmation) {
+        [self axs_springtwelve_showMenu];
+    }
+    if (message.length) UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, message);
 }
 
 - (void)axs_springtwelve_cancelConfirmation {
     self.axs_springtwelve_confirmationToken = nil;
     self.axs_springtwelve_pendingAction = 0;
-    [self.axs_springtwelve_confirmation dismissViewControllerAnimated:NO completion:nil];
+    UIAlertController *alert = self.axs_springtwelve_confirmation;
     self.axs_springtwelve_confirmation = nil;
-    self.axs_springtwelve_menuPanel.hidden = NO;
-    UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, self.axs_springtwelve_menuPanel);
+    [alert dismissViewControllerAnimated:YES completion:nil];
+    [self axs_springtwelve_showMenu];
 }
 
 - (BOOL)accessibilityPerformEscape {
@@ -315,24 +314,30 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
     return YES;
 }
 
-- (void)axs_springtwelve_confirm:(UIButton *)sender {
+- (void)axs_springtwelve_confirmAction:(AxsSpringTwelvePowerAction)selected {
     if (![self axs_springtwelve_contextValid]) { [self axs_springtwelve_close]; return; }
-    if (self.axs_springtwelve_confirmation || self.presentedViewController ||
-        self.axs_springtwelve_pendingAction || self.axs_springtwelve_executing) return;
-    AxsSpringTwelvePowerAction selected = (AxsSpringTwelvePowerAction)sender.tag;
+    if (self.axs_springtwelve_confirmation || self.axs_springtwelve_pendingAction || self.axs_springtwelve_executing) return;
     if (!axs_springtwelve_powerActionAvailable(selected)) {
         [self axs_springtwelve_setStatus:@"此操作所需的系统接口或提权工具当前不可用，请检查安装后重新打开面板。"];
         return;
     }
     NSUUID *token = NSUUID.UUID;
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:
-        [@"确认：" stringByAppendingString:axs_springtwelve_powerActionTitle(selected)]
-        message:axs_springtwelve_powerActionWarning(selected)
-        preferredStyle:UIAlertControllerStyleAlert];
-    self.axs_springtwelve_confirmation = alert;
     self.axs_springtwelve_confirmationToken = token;
     self.axs_springtwelve_pendingAction = selected;
-    self.axs_springtwelve_menuPanel.hidden = YES;
+    __weak AxsSpringTwelvePowerMenuController *weakSelf = self;
+    [self axs_springtwelve_queuePresentation:^{
+        AxsSpringTwelvePowerMenuController *controller = weakSelf;
+        if (!controller || controller.axs_springtwelve_confirmationToken != token ||
+            controller.axs_springtwelve_pendingAction != selected) return;
+        [controller axs_springtwelve_presentConfirmation:selected token:token];
+    }];
+}
+
+- (void)axs_springtwelve_presentConfirmation:(AxsSpringTwelvePowerAction)selected token:(NSUUID *)token {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:
+        [@"确认：" stringByAppendingString:axs_springtwelve_powerActionTitle(selected)]
+        message:axs_springtwelve_powerActionWarning(selected) preferredStyle:UIAlertControllerStyleAlert];
+    self.axs_springtwelve_confirmation = alert;
     __weak AxsSpringTwelvePowerMenuController *weakSelf = self;
     __weak UIAlertController *weakAlert = alert;
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel
@@ -340,18 +345,17 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
         AxsSpringTwelvePowerMenuController *controller = weakSelf;
         if (!controller || controller.axs_springtwelve_closing ||
             controller.axs_springtwelve_confirmationToken != token ||
-            controller.axs_springtwelve_pendingAction != selected) return;
-        // UIKit manages dismissal for the selected system alert action.
+            controller.axs_springtwelve_pendingAction != selected ||
+            controller.axs_springtwelve_confirmation != weakAlert) return;
         controller.axs_springtwelve_confirmationToken = nil;
         controller.axs_springtwelve_pendingAction = 0;
         controller.axs_springtwelve_confirmation = nil;
-        controller.axs_springtwelve_menuPanel.hidden = NO;
         axs_springtwelve_powerLog(@"confirmation-cancelled");
-        }]];
+        [controller axs_springtwelve_showMenu];
+    }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"确认执行" style:UIAlertActionStyleDestructive
         handler:^(__unused UIAlertAction *action) {
         AxsSpringTwelvePowerMenuController *controller = weakSelf;
-        // A stale event must not clear or close a newer request.
         if (!controller || controller.axs_springtwelve_closing ||
             controller.axs_springtwelve_confirmationToken != token ||
             controller.axs_springtwelve_pendingAction != selected) return;
@@ -363,13 +367,11 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
             axs_springtwelve_powerLog(@"confirmation-rejected");
             [controller axs_springtwelve_close]; return;
         }
-        // Consume the one-shot authorization before submitting. UIKit owns
-        // dismissal; do not race its automatic dismissal with another call.
+        // Only this one-shot confirmed path may submit a device action.
         controller.axs_springtwelve_confirmationToken = nil;
         controller.axs_springtwelve_pendingAction = 0;
         controller.axs_springtwelve_confirmation = nil;
         controller.axs_springtwelve_executing = YES;
-        controller.axs_springtwelve_menuPanel.hidden = NO;
         [controller axs_springtwelve_setStatus:@"正在提交操作，请勿重复点击。"];
         NSDictionary<NSNumber *, NSString *> *events = @{
             @(AxsSpringTwelvePowerActionQuickRespring): @"quick-respring-request",
@@ -391,9 +393,8 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
                 [live axs_springtwelve_setStatus:@"操作请求已提交。若设备未响应，请关闭面板并导出功能诊断；提交不代表重启已经完成。"];
                 axs_springtwelve_powerLog(@"action-request-submitted");
             }
-            UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, live.axs_springtwelve_status.text);
         });
-        }]];
+    }]];
     [self presentViewController:alert animated:YES completion:^{
         AxsSpringTwelvePowerMenuController *controller = weakSelf;
         if (controller.axs_springtwelve_confirmationToken == token &&
@@ -401,6 +402,7 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
     }];
     axs_springtwelve_powerLog(@"system-confirmation-presented");
 }
+
 
 @end
 
