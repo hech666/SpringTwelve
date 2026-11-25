@@ -9,7 +9,7 @@ AxsSpringTwelvePowerHelper_FILES = main.c
 AxsSpringTwelvePowerHelper_CFLAGS = -std=c11 -Wall -Wextra
 AxsSpringTwelvePowerHelper_INSTALL_PATH = /usr/local/libexec
 # Theos uses CODESIGN_FLAGS (not CODE_SIGN_FLAGS); ldid requires -S<plist>.
-AxsSpringTwelvePowerHelper_CODESIGN_FLAGS = -S"$(THEOS_PROJECT_DIR)/entitlements.plist"
+AxsSpringTwelvePowerHelper_CODESIGN_FLAGS = -S"$(THEOS_PROJECT_DIR)/PowerHelper/entitlements.plist"
 
 include $(THEOS_MAKE_PATH)/tool.mk
 
