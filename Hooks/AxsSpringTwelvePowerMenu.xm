@@ -339,7 +339,7 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
     [card addSubview:scroll];
     UIStackView *stack = [UIStackView new];
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 12;
+    stack.spacing = 8;
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     [scroll addSubview:stack];
     UILabel *heading = [UILabel new];
@@ -411,15 +411,15 @@ static NSArray<NSLayoutConstraint *> *axs_springtwelve_powerCardConstraints(UIVi
     for (UIButton *button in @[confirm, cancel]) {
         button.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
         button.titleLabel.adjustsFontForContentSizeCategory = YES;
-        [button.heightAnchor constraintGreaterThanOrEqualToConstant:48].active = YES;
+        [button.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
         [stack addArrangedSubview:button];
     }
-    [NSLayoutConstraint activateConstraints:axs_springtwelve_powerCardConstraints(card, self.view, 440.0)];
+    [NSLayoutConstraint activateConstraints:axs_springtwelve_powerCardConstraints(card, self.view, 360.0)];
     [NSLayoutConstraint activateConstraints:@[
-        [scroll.topAnchor constraintEqualToAnchor:card.topAnchor constant:20],
-        [scroll.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-20],
-        [scroll.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
-        [scroll.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+        [scroll.topAnchor constraintEqualToAnchor:card.topAnchor constant:14],
+        [scroll.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-14],
+        [scroll.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [scroll.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
         [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor],
         [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor],
         [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor],

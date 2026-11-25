@@ -10,7 +10,7 @@
 
 NSString *axs_springtwelve_powerActionTitle(AxsSpringTwelvePowerAction action) {
     switch (action) {
-        case AxsSpringTwelvePowerActionQuickRespring: return @"快速注销";
+        case AxsSpringTwelvePowerActionQuickRespring: return @"注销";
         case AxsSpringTwelvePowerActionForceRespring: return @"强制注销";
         case AxsSpringTwelvePowerActionRespring: return @"重启桌面";
         case AxsSpringTwelvePowerActionUserspaceReboot: return @"重启用户空间";
