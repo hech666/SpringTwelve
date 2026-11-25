@@ -7,6 +7,9 @@ export CC="$(xcrun --sdk iphoneos --find clang)"
 export AR="$(xcrun --sdk iphoneos --find ar)"
 export RANLIB="$(xcrun --sdk iphoneos --find ranlib)"
 export CFLAGS="-arch arm64e -isysroot $SDK -miphoneos-version-min=15.0 -O2 -fno-common"
+# Autoconf's standalone header/preprocessor probes do not inherit CFLAGS.
+# Without an explicit iOS SDK here they falsely report STDC_HEADERS=no.
+export CPP="$CC -E -arch arm64e -isysroot $SDK -miphoneos-version-min=15.0"
 export LDFLAGS="-arch arm64e -isysroot $SDK -miphoneos-version-min=15.0"
 python3 -c 'import hashlib,pathlib; p=pathlib.Path("vendor/lame-3.100.tar.gz"); assert hashlib.sha256(p.read_bytes()).hexdigest()=="ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"'
 mkdir -p .build
