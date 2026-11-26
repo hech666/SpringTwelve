@@ -25,6 +25,8 @@ for guard in ['"@@:"', '"v@:@@B"', '"v@:@@@BB"', '@encode(BOOL)',
               'method_getImplementation(actual) != method_getImplementation(base)',
               'source.allControlEvents & UIControlEventTouchUpInside',
               '!AxsDialAddStateSupported(lcd)', 'AxsDialRestoreAddButton(controller)',
+              'AxsDialHideNativeLinePicker', 'AxsDialRestoreNativeLinePicker',
+              'phonePadView', 'source.hidden = NO',
               'CGRectIntersectsRect(plusRect, deleteTarget)', 'accessoryHeight / 2.0']:
     assert guard in s, guard
 assert 'lcd.hidden =' not in s and 'lcdView.hidden =' not in s

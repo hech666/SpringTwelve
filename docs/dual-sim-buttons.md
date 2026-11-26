@@ -16,8 +16,8 @@
 ## 原生 Add Number 代理与兼容回退
 
 - 旧版公开 classdump 仅作为名称与历史接口证据：`PHAbstractDialerView.addContactButton` 是 `UIControl`；`PHHandsetDialerLCDView.addContactButton` 是 `UIButton`，并公开 `addContactPressed:` 及两个 `updateAddAndDeleteButtonForText:...`；`DialerController` 有 `_addButtonClicked:`。缓存头文件来自本次上下文给出的 `phone-native-evidence/chashmeetsingh_MobilePhone-Headers_*.h`，**不是目标 iOS 版本的运行时证明**。
-- 新路径对 `dialerView`、`callButton`、`lcdView`、`deleteButton`、`addContactButton` getter 检查无显式参数、对象返回 ABI，再检查 UIKit 类型及真实祖先关系；先尝试 dialerView 的添加控件，再尝试 LCD 添加控件。必须确有原生 `TouchUpInside` 事件。代理点击前重新验证当前布局与源控件，然后只执行原生 UIControl 的 `sendActionsForControlEvents:UIControlEventTouchUpInside`；不调用、替换或猜测 `_addButtonClicked:` / `addContactPressed:` 的方法签名，不移植 target/action，不自行创建联系人。
-- 代理只在完整双卡 UI 成功时接管原生添加控件的 `hidden`。保留源控件对象和原生期望的 hidden；代理同步 hidden、enabled、alpha、tint 和辅助功能标签，并考虑源控件原有祖先的隐藏/交互/alpha。始终保留 LCD 容器和号码文本，不隐藏 `lcdView` 或号码标签。
+- 新路径对 `dialerView`、`callButton`、`lcdView`、`deleteButton`、`addContactButton` getter 检查无显式参数、对象返回 ABI，再检查 UIKit 类型及真实祖先关系；先尝试 dialerView 的添加控件，再尝试 LCD 添加控件。必须确有原生 `TouchUpInside` 事件。代理点击前重新验证当前布局与源控件，然后临时恢复原生控件的可见状态，仅在同步派发期间直接执行原生 UIControl 的 `sendActionsForControlEvents:UIControlEventTouchUpInside`，派发结束立即恢复插件隐藏状态；不调用、替换或猜测 `_addButtonClicked:` / `addContactPressed:` 的方法签名，不移植 target/action，不自行创建联系人。
+- 双卡布局成功后，按当前两个 sender identity 的显示名称，在拨号键盘上方扫描原生 UIControl；仅隐藏同时满足“位于键盘上方、包含线路名称、不是 LCD/键盘/删除键/自定义线路键”的控件，并保存其原始 hidden 状态。关闭或布局回退时恢复；不隐藏号码 LCD 或号码标签。
 - 两个已知 LCD 更新方法分别要求精确的 `void(id,id,BOOL)` 和 `void(id,id,id,BOOL,BOOL)` 实例方法 ABI（包括 self/_cmd）；只在匹配时 hook。调用系统原实现前恢复原生期望 hidden，返回后重新记录原生结果并同步/隐藏源控件；嵌套调用用深度计数只在最外层捕获，`@finally` 保证配对。控制器原生布局及删除显隐刷新也使用同样的恢复/捕获包装。未观察到的方法、未知 ABI、未被这些 hooks 覆盖的子类 override 均不激活整套自定义 UI；不通过自调私有状态方法猜测显隐。
 - 关闭开关、线路不足、宿主/源控件更换、缺少方法/图标/事件或空间不足时移除两个胶囊和加号，恢复原生 callButton hidden、添加控件最近记录的原生 hidden、仍属插件持有的删除键 transform；系统已覆盖的 transform 不回滚。原生 callButton 仍仅在双卡模式成功显示期间隐藏，没有猜测独立的 SIM 选择控件。弱引用 LCD→控制器映射避免循环持有。
 
