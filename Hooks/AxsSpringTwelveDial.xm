@@ -25,43 +25,6 @@ static char AxsDialDeleteButtonKey;
 static char AxsDialDeleteTransformKey;
 static char AxsDialDeleteLayoutPendingKey;
 static char AxsDialIdentityKey;
-static char AxsDialAddSourceKey;
-static char AxsDialAddProxyKey;
-static char AxsDialAddLCDKey;
-static char AxsDialAddOwnerKey;
-static char AxsDialAddHiddenKey;
-static char AxsDialNativeLinePickerKey;
-static char AxsDialAddUpdateDepthKey;
-static Class AxsDialAddLCDClass;
-static BOOL AxsDialAddShortHooked;
-static BOOL AxsDialAddLongHooked;
-
-// Exact ABI checks for the additional private getters/hooks; never invoke a
-// selector just because respondsToSelector: returned YES.
-static BOOL AxsDialExactSignature(Class cls, SEL selector, const char *types) {
-    Method method = cls ? class_getInstanceMethod(cls, selector) : NULL;
-    if (!method) return NO;
-    NSMethodSignature *sig = [NSMethodSignature signatureWithObjCTypes:method_getTypeEncoding(method)];
-    if (!sig || sig.numberOfArguments != strlen(types) - 1 ||
-        strcmp(sig.methodReturnType, types[0] == '@' ? "@" : "v") != 0) return NO;
-    for (NSUInteger i = 0; i < sig.numberOfArguments; i++) {
-        const char *type = [sig getArgumentTypeAtIndex:i];
-        char expected = types[i + 1];
-        if (expected == 'B') {
-            if (strcmp(type, @encode(BOOL)) != 0) return NO;
-        } else if (type[0] != expected || (type[1] && !(expected == '@' && type[1] == '"'))) {
-            return NO;
-        }
-    }
-    return YES;
-}
-
-static id AxsDialCheckedGet(id object, NSString *name) {
-    SEL selector = NSSelectorFromString(name);
-    if (!object || !AxsDialExactSignature(object_getClass(object), selector, "@@:")) return nil;
-    @try { return ((id (*)(id, SEL))objc_msgSend)(object, selector); }
-    @catch (__unused NSException *exception) { return nil; }
-}
 
 static id AxsDialGet(id object, NSString *name) {
     if (!object || !name.length) return nil;
@@ -141,98 +104,6 @@ static void AxsDialEnsureT9Observer(id controller, id lcdView) {
 
 #pragma mark - Dual-SIM call controls
 
-static BOOL AxsDialAddStateSupported(UIView *lcd) {
-    if (!AxsDialAddLCDClass || ![lcd isKindOfClass:AxsDialAddLCDClass]) return NO;
-    NSArray *names = @[@"updateAddAndDeleteButtonForText:name:animated:",
-                       @"updateAddAndDeleteButtonForText:name:label:suggestion:animated:"];
-    const char *types[] = {"v@:@@B", "v@:@@@BB"};
-    BOOL hooked[] = {AxsDialAddShortHooked, AxsDialAddLongHooked};
-    BOOL observed = NO;
-    for (NSUInteger i = 0; i < names.count; i++) {
-        SEL sel = NSSelectorFromString(names[i]);
-        Method actual = class_getInstanceMethod(object_getClass(lcd), sel);
-        if (!actual) continue;
-        Method base = class_getInstanceMethod(AxsDialAddLCDClass, sel);
-        // An unobserved subclass override cannot safely maintain native hidden state.
-        if (!hooked[i] || !base || !AxsDialExactSignature(object_getClass(lcd), sel, types[i]) ||
-            method_getImplementation(actual) != method_getImplementation(base)) return NO;
-        observed = YES;
-    }
-    return observed;
-}
-
-static UIControl *AxsDialFindAddSource(UIView *host, UIView *lcd, UIView *callButton) {
-    id source = AxsDialCheckedGet(host, @"addContactButton");
-    if (![source isKindOfClass:UIControl.class]) source = AxsDialCheckedGet(lcd, @"addContactButton");
-    if (![source isKindOfClass:UIControl.class] || source == host || source == lcd ||
-        ![source isDescendantOfView:host] || [source isDescendantOfView:callButton] ||
-        !(((UIControl *)source).allControlEvents & UIControlEventTouchUpInside)) return nil;
-    return source;
-}
-
-static void AxsDialRestoreAddButton(id controller) {
-    UIControl *source = objc_getAssociatedObject(controller, &AxsDialAddSourceKey);
-    NSNumber *hidden = objc_getAssociatedObject(controller, &AxsDialAddHiddenKey);
-    // If Phone already exposed the original, do not overwrite its newer state.
-    if (source && hidden && source.hidden) source.hidden = hidden.boolValue;
-    [objc_getAssociatedObject(controller, &AxsDialAddProxyKey) removeFromSuperview];
-    UIView *lcd = objc_getAssociatedObject(controller, &AxsDialAddLCDKey);
-    NSHashTable *owner = objc_getAssociatedObject(lcd, &AxsDialAddOwnerKey);
-    if (owner.anyObject == controller)
-        objc_setAssociatedObject(lcd, &AxsDialAddOwnerKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(controller, &AxsDialAddSourceKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(controller, &AxsDialAddProxyKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(controller, &AxsDialAddLCDKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(controller, &AxsDialAddHiddenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
-
-static void AxsDialSyncAddProxy(id controller) {
-    UIControl *source = objc_getAssociatedObject(controller, &AxsDialAddSourceKey);
-    UIButton *proxy = objc_getAssociatedObject(controller, &AxsDialAddProxyKey);
-    UIView *host = objc_getAssociatedObject(controller, &AxsDialDualHostKey);
-    if (!source || !proxy || !host) return;
-    BOOL hidden = [objc_getAssociatedObject(controller, &AxsDialAddHiddenKey) boolValue];
-    BOOL enabled = source.enabled && source.userInteractionEnabled;
-    CGFloat alpha = source.alpha;
-    for (UIView *parent = source.superview; parent && parent != host; parent = parent.superview) {
-        hidden |= parent.hidden;
-        enabled &= parent.userInteractionEnabled;
-        alpha *= parent.alpha;
-    }
-    proxy.hidden = hidden;
-    proxy.enabled = enabled;
-    proxy.alpha = alpha;
-    proxy.tintColor = source.tintColor;
-    proxy.accessibilityLabel = source.accessibilityLabel.length ? source.accessibilityLabel : @"添加号码";
-    source.hidden = YES; // Never hide lcdView or its number label.
-}
-
-static id AxsDialBeginAddUpdate(id lcd) {
-    NSHashTable *owner = objc_getAssociatedObject(lcd, &AxsDialAddOwnerKey);
-    id controller = owner.anyObject;
-    if (!controller) return nil;
-    NSUInteger depth = [objc_getAssociatedObject(controller, &AxsDialAddUpdateDepthKey) unsignedIntegerValue];
-    objc_setAssociatedObject(controller, &AxsDialAddUpdateDepthKey, @(depth + 1), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if (!depth) {
-        UIControl *source = objc_getAssociatedObject(controller, &AxsDialAddSourceKey);
-        source.hidden = [objc_getAssociatedObject(controller, &AxsDialAddHiddenKey) boolValue];
-        ((UIView *)objc_getAssociatedObject(controller, &AxsDialAddProxyKey)).hidden = YES;
-    }
-    return controller;
-}
-
-static void AxsDialEndAddUpdate(id controller) {
-    if (!controller) return;
-    NSUInteger depth = [objc_getAssociatedObject(controller, &AxsDialAddUpdateDepthKey) unsignedIntegerValue];
-    if (!depth) return;
-    objc_setAssociatedObject(controller, &AxsDialAddUpdateDepthKey, @(depth - 1), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    if (depth > 1) return;
-    UIControl *source = objc_getAssociatedObject(controller, &AxsDialAddSourceKey);
-    if (!source) return;
-    objc_setAssociatedObject(controller, &AxsDialAddHiddenKey, @(source.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    AxsDialSyncAddProxy(controller);
-}
-
 static void AxsDialRestoreDeleteButton(id controller) {
     UIView *button = objc_getAssociatedObject(controller, &AxsDialDeleteButtonKey);
     NSArray<NSValue *> *transforms = objc_getAssociatedObject(controller, &AxsDialDeleteTransformKey);
@@ -245,11 +116,10 @@ static void AxsDialRestoreDeleteButton(id controller) {
 }
 
 // Move the actual control, not a copy: native targets, gestures and visibility stay intact.
-static BOOL AxsDialPositionDeleteButton(id controller, UIView *button, UIView *host,
-                                        CGRect row, CGFloat accessoryHeight) {
+static BOOL AxsDialPositionDeleteButton(id controller, UIView *button, UIView *host, CGRect row) {
     CGRect original = [button convertRect:button.bounds toView:host];
     CGPoint destination = CGPointMake(CGRectGetMidX(row),
-                                      CGRectGetMaxY(row) + 8.0 + accessoryHeight / 2.0);
+                                      CGRectGetMaxY(row) + 8.0 + CGRectGetHeight(original) / 2.0);
     CGRect target = CGRectOffset(original, destination.x - CGRectGetMidX(original),
                                   destination.y - CGRectGetMidY(original));
     // A transform outside any native ancestor may draw correctly but reject touches.
@@ -272,11 +142,8 @@ static BOOL AxsDialPositionDeleteButton(id controller, UIView *button, UIView *h
     return YES;
 }
 
-static void AxsDialRestoreNativeLinePicker(id controller);
-
 static void AxsDialRemoveDualButtons(id controller) {
-    AxsDialRestoreNativeLinePicker(controller);
-    AxsDialRestoreAddButton(controller);
+    AxsDialRestoreDeleteButton(controller);
     NSArray *buttons = objc_getAssociatedObject(controller, &AxsDialDualButtonsKey);
     for (id button in buttons) {
         if ([button isKindOfClass:[UIView class]]) [button removeFromSuperview];
@@ -304,108 +171,14 @@ static NSString *AxsDialIdentityTitle(id identity, NSUInteger index) {
     return title;
 }
 
-static BOOL AxsDialTextMatchesIdentity(NSString *text, NSArray *titles) {
-    if (![text isKindOfClass:[NSString class]] || !text.length) return NO;
-    for (NSString *title in titles) {
-        if ([title isKindOfClass:[NSString class]] && title.length &&
-            ([text isEqualToString:title] || [text containsString:title])) return YES;
-    }
-    return NO;
-}
-
-static BOOL AxsDialViewShowsIdentity(UIView *view, NSArray *titles) {
-    if ([view isKindOfClass:[UILabel class]] &&
-        AxsDialTextMatchesIdentity(((UILabel *)view).text, titles)) return YES;
-    if ([view isKindOfClass:[UIButton class]] &&
-        (AxsDialTextMatchesIdentity(((UIButton *)view).currentTitle, titles) ||
-         AxsDialTextMatchesIdentity(((UIButton *)view).accessibilityLabel, titles))) return YES;
-    if (AxsDialTextMatchesIdentity(view.accessibilityLabel, titles)) return YES;
-    for (UIView *child in view.subviews) {
-        if (AxsDialViewShowsIdentity(child, titles)) return YES;
-    }
-    return NO;
-}
-
-static void AxsDialCollectNativeLinePickers(UIView *view, UIView *host, UIView *lcd,
-                                             UIView *phonePad, UIControl *addSource,
-                                             UIView *callButton, UIView *deleteButton,
-                                             NSArray *customButtons, NSArray *titles,
-                                             CGFloat keypadTop, NSMutableArray *result) {
-    for (UIView *child in view.subviews) {
-        if (child == lcd || child == phonePad || child == deleteButton ||
-            child == addSource || [customButtons containsObject:child] ||
-            [child isDescendantOfView:lcd] || [child isDescendantOfView:phonePad]) continue;
-        CGRect frame = [child convertRect:child.bounds toView:host];
-        BOOL candidate = [child isKindOfClass:UIControl.class] &&
-            CGRectGetMinY(frame) < keypadTop && CGRectGetHeight(frame) > 10.0 &&
-            AxsDialViewShowsIdentity(child, titles);
-        if (candidate) [result addObject:child];
-        AxsDialCollectNativeLinePickers(child, host, lcd, phonePad, addSource, callButton,
-                                         deleteButton, customButtons, titles, keypadTop, result);
-    }
-}
-
-static void AxsDialRestoreNativeLinePicker(id controller) {
-    NSArray *saved = objc_getAssociatedObject(controller, &AxsDialNativeLinePickerKey);
-    for (NSArray *entry in saved) {
-        UIView *view = entry.count > 0 ? entry[0] : nil;
-        if ([view isKindOfClass:UIView.class] && entry.count > 1)
-            view.hidden = [entry[1] boolValue];
-    }
-    objc_setAssociatedObject(controller, &AxsDialNativeLinePickerKey, nil,
-                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
-
-static void AxsDialHideNativeLinePicker(id controller, UIView *host, UIView *lcd,
-                                        UIView *phonePad, UIControl *addSource,
-                                        UIView *callButton, UIView *deleteButton,
-                                        NSArray *customButtons, NSArray *identities) {
-    AxsDialRestoreNativeLinePicker(controller);
-    if (!phonePad || ![phonePad isDescendantOfView:host]) return;
-    CGRect padRect = [phonePad convertRect:phonePad.bounds toView:host];
-    CGFloat keypadTop = CGRectGetMinY(padRect);
-    if (!(keypadTop > CGRectGetMinY(host.bounds))) return;
-    NSMutableArray *titles = [NSMutableArray array];
-    for (NSUInteger i = 0; i < identities.count; i++) {
-        NSString *shortTitle = AxsDialIdentityTitle(identities[i], i);
-        if (shortTitle.length) [titles addObject:shortTitle];
-        NSString *longTitle = AxsDialGet(identities[i], @"localizedName");
-        if ([longTitle isKindOfClass:NSString.class] && longTitle.length)
-            [titles addObject:longTitle];
-    }
-    NSMutableArray *found = [NSMutableArray array];
-    AxsDialCollectNativeLinePickers(host, host, lcd, phonePad, addSource, callButton,
-                                    deleteButton, customButtons, titles, keypadTop, found);
-    NSMutableArray *saved = [NSMutableArray arrayWithCapacity:found.count];
-    for (UIView *view in found) {
-        BOOL duplicate = NO;
-        for (NSArray *entry in saved) {
-            if (entry.firstObject == view) { duplicate = YES; break; }
-        }
-        if (duplicate) continue;
-        [saved addObject:@[view, @(view.hidden)]];
-        view.hidden = YES;
-    }
-    if (saved.count) objc_setAssociatedObject(controller, &AxsDialNativeLinePickerKey, saved,
-                                               OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-}
-
 static void AxsDialUpdateDualButtons(id controller) {
     AxsDialRestoreDeleteButton(controller);
-    UIView *host = AxsDialCheckedGet(controller, @"dialerView");
-    if (![host isKindOfClass:UIView.class]) { AxsDialRemoveDualButtons(controller); return; }
-    UIView *callButton = AxsDialCheckedGet(host, @"callButton");
-    UIView *lcd = AxsDialCheckedGet(host, @"lcdView");
-    UIView *phonePad = AxsDialCheckedGet(host, @"phonePadView");
-    if (![callButton isKindOfClass:UIControl.class] || ![lcd isKindOfClass:UIView.class]) {
-        AxsDialRemoveDualButtons(controller); return;
-    }
-    UIControl *addSource = AxsDialFindAddSource(host, lcd, callButton);
+    UIView *callButton = AxsDialPart(controller, @"callButton");
+    UIView *host = AxsDialGet(controller, @"dialerView");
+    if (![host isKindOfClass:UIView.class] || ![callButton isDescendantOfView:host])
+        host = callButton.superview;
     NSArray *identities = AxsDialIdentities(controller);
-    if (!AxsDialDualEnabled() || identities.count < 2 || !callButton.superview ||
-        ![callButton isDescendantOfView:host] || ![lcd isDescendantOfView:host] ||
-        !addSource || !AxsDialAddStateSupported(lcd) ||
-        [objc_getAssociatedObject(controller, &AxsDialAddUpdateDepthKey) unsignedIntegerValue] ||
+    if (!AxsDialDualEnabled() || identities.count < 2 || !callButton.superview || !host ||
         CGRectGetWidth(callButton.bounds) < 20.0 || CGRectGetHeight(callButton.bounds) < 20.0) {
         AxsDialRemoveDualButtons(controller);
         return;
@@ -420,18 +193,20 @@ static void AxsDialUpdateDualButtons(id controller) {
     CGFloat totalWidth = MIN(CGRectGetWidth(available) - 24.0,
                              MIN(320.0, MAX(240.0, CGRectGetWidth(available) * 0.72)));
     CGFloat width = (totalWidth - gap) / 2.0;
-    UIView *deleteButton = AxsDialCheckedGet(host, @"deleteButton");
-    if (![deleteButton isKindOfClass:UIControl.class] || deleteButton == addSource ||
-        ![deleteButton isDescendantOfView:host] || [deleteButton isDescendantOfView:callButton] ||
-        [deleteButton isDescendantOfView:addSource] || [addSource isDescendantOfView:deleteButton]) {
-        AxsDialRemoveDualButtons(controller); return;
+    UIView *deleteButton = AxsDialPart(controller, @"deleteButton");
+    CGFloat controlsHeight = height;
+    if (deleteButton) {
+        if (![deleteButton isDescendantOfView:host] || [deleteButton isDescendantOfView:callButton]) {
+            AxsDialRemoveDualButtons(controller);
+            return;
+        }
+        CGRect deleteRect = [deleteButton convertRect:deleteButton.bounds toView:host];
+        if (CGRectIsEmpty(deleteRect) || CGRectIsInfinite(deleteRect)) {
+            AxsDialRemoveDualButtons(controller);
+            return;
+        }
+        controlsHeight += 8.0 + MAX(44.0, CGRectGetHeight(deleteRect));
     }
-    CGRect deleteRect = [deleteButton convertRect:deleteButton.bounds toView:host];
-    if (CGRectIsEmpty(deleteRect) || CGRectIsInfinite(deleteRect) || CGRectIsNull(deleteRect)) {
-        AxsDialRemoveDualButtons(controller); return;
-    }
-    CGFloat accessoryHeight = MAX(44.0, CGRectGetHeight(deleteRect));
-    CGFloat controlsHeight = height + 8.0 + accessoryHeight;
     // Do not shift above the native call row into the numeric keypad.
     CGFloat minimumY = MAX(CGRectGetMinY(available), CGRectGetMinY(anchor));
     CGFloat maximumY = CGRectGetMaxY(available) - controlsHeight;
@@ -442,22 +217,6 @@ static void AxsDialUpdateDualButtons(id controller) {
     CGFloat x = MIN(MAX(CGRectGetMidX(anchor) - totalWidth / 2.0, CGRectGetMinX(available) + 12.0),
                     CGRectGetMaxX(available) - totalWidth - 12.0);
     CGFloat y = MIN(MAX(CGRectGetMidY(anchor) - height / 2.0, minimumY), maximumY);
-    CGFloat accessoryY = y + height + 8.0 + accessoryHeight / 2.0;
-    CGRect plusRect = CGRectMake(x + width / 2.0 - 22.0, accessoryY - 22.0, 44.0, 44.0);
-    CGRect deleteTarget = CGRectMake(x + width + gap + width / 2.0 - CGRectGetWidth(deleteRect) / 2.0,
-                                    accessoryY - CGRectGetHeight(deleteRect) / 2.0,
-                                    CGRectGetWidth(deleteRect), CGRectGetHeight(deleteRect));
-    if (!CGRectContainsRect(available, plusRect) || !CGRectContainsRect(available, deleteTarget) ||
-        CGRectIntersectsRect(plusRect, deleteTarget)) { AxsDialRemoveDualButtons(controller); return; }
-    // The host itself must also remain within every ancestor's hit-test bounds.
-    for (UIView *ancestor = host.superview; ancestor; ancestor = ancestor.superview) {
-        CGRect required = CGRectUnion(CGRectMake(x, y, totalWidth, height), CGRectUnion(plusRect, deleteTarget));
-        if (!CGRectContainsRect(ancestor.bounds, [host convertRect:required toView:ancestor])) {
-            AxsDialRemoveDualButtons(controller); return;
-        }
-    }
-    UIImage *plusImage = [UIImage systemImageNamed:@"plus"];
-    if (!plusImage) { AxsDialRemoveDualButtons(controller); return; }
 
     NSArray *buttons = objc_getAssociatedObject(controller, &AxsDialDualButtonsKey);
     id oldCallButton = objc_getAssociatedObject(controller, &AxsDialOriginalButtonKey);
@@ -492,25 +251,6 @@ static void AxsDialUpdateDualButtons(id controller) {
         objc_setAssociatedObject(controller, &AxsDialOriginalHiddenKey, @(originalHidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 
-    if (objc_getAssociatedObject(controller, &AxsDialAddSourceKey) != addSource ||
-        objc_getAssociatedObject(controller, &AxsDialAddLCDKey) != lcd) {
-        AxsDialRestoreAddButton(controller);
-        UIButton *proxy = [UIButton buttonWithType:UIButtonTypeSystem];
-        [proxy setImage:plusImage forState:UIControlStateNormal];
-        proxy.accessibilityIdentifier = @"com.axs.springtwelve.dialer.add-number";
-        [proxy addTarget:controller action:@selector(axs_springtwelve_addNumberTapped:)
-         forControlEvents:UIControlEventTouchUpInside];
-        [host addSubview:proxy];
-        NSHashTable *owner = [NSHashTable weakObjectsHashTable];
-        [owner addObject:controller];
-        objc_setAssociatedObject(lcd, &AxsDialAddOwnerKey, owner, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &AxsDialAddSourceKey, addSource, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &AxsDialAddProxyKey, proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &AxsDialAddLCDKey, lcd, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &AxsDialAddHiddenKey, @(addSource.hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-    UIButton *proxy = objc_getAssociatedObject(controller, &AxsDialAddProxyKey);
-    proxy.frame = plusRect;
     callButton.hidden = YES; // Phone may restore the native button during layout.
     for (NSUInteger index = 0; index < 2; index++) {
         UIButton *button = buttons[index];
@@ -523,18 +263,10 @@ static void AxsDialUpdateDualButtons(id controller) {
         button.hidden = NO;
         [host bringSubviewToFront:button];
     }
-    if (!AxsDialPositionDeleteButton(controller, deleteButton, host,
-                                    CGRectMake(x + width + gap, y, width, height), accessoryHeight)) {
+    if (deleteButton && !AxsDialPositionDeleteButton(controller, deleteButton, host,
+                                                     CGRectMake(x, y, totalWidth, height))) {
         AxsDialRemoveDualButtons(controller);
-        return;
     }
-    AxsDialHideNativeLinePicker(controller, host, lcd, phonePad, addSource, callButton,
-                                deleteButton, buttons, identities);
-    // Capture a native exposure observed outside the guarded state updates too.
-    if (!addSource.hidden)
-        objc_setAssociatedObject(controller, &AxsDialAddHiddenKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    AxsDialSyncAddProxy(controller);
-    [host bringSubviewToFront:proxy];
 }
 
 #pragma mark - T9 contact indexing
@@ -1024,10 +756,8 @@ static void AxsDialRefreshLater(id controller) {
 }
 
 - (void)viewDidLayoutSubviews {
-    id addUpdate = AxsDialBeginAddUpdate(objc_getAssociatedObject(self, &AxsDialAddLCDKey));
     AxsDialRestoreDeleteButton(self);
-    @try { %orig; }
-    @finally { AxsDialEndAddUpdate(addUpdate); }
+    %orig;
     AxsDialUpdateDualButtons(self);
     AxsDialEnsureT9Observer(self, AxsDialPart(self, @"lcdView"));
     AxsDialRefreshT9(self);
@@ -1066,31 +796,6 @@ static void AxsDialRefreshLater(id controller) {
     NSUInteger generation = [objc_getAssociatedObject(self, &AxsDialT9GenerationKey) unsignedIntegerValue] + 1;
     objc_setAssociatedObject(self, &AxsDialT9GenerationKey, @(generation), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     AxsDialShowCandidates(self, @[]);
-}
-
-%new
-- (void)axs_springtwelve_addNumberTapped:(UIButton *)sender {
-    AxsDialUpdateDualButtons(self); // Revalidate ownership, ABI, feature and touch bounds.
-    if (!AxsDialDualEnabled() || sender != objc_getAssociatedObject(self, &AxsDialAddProxyKey)) return;
-    AxsDialSyncAddProxy(self);
-    UIControl *source = objc_getAssociatedObject(self, &AxsDialAddSourceKey);
-    if (!source || sender.hidden || !sender.enabled || sender.alpha <= 0.01 ||
-        !(source.allControlEvents & UIControlEventTouchUpInside)) return;
-    // Dispatch through the original control with its original target/action. Phone may
-    // keep that source hidden while the proxy is active, so expose it only for the
-    // synchronous native dispatch and hide it again immediately afterwards.
-    BOOL sourceHidden = source.hidden;
-    @try {
-        source.hidden = NO;
-        [source sendActionsForControlEvents:UIControlEventTouchUpInside];
-    } @finally {
-        source.hidden = YES;
-        if (!sourceHidden) {
-            objc_setAssociatedObject(self, &AxsDialAddHiddenKey, @NO,
-                                     OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        }
-        AxsDialSyncAddProxy(self);
-    }
 }
 
 %new
@@ -1163,10 +868,8 @@ static void AxsDialRefreshLater(id controller) {
 %group AxsSpringTwelveDialDeleteVisibilityGroup
 %hook DialerController
 - (void)showOrHideDeleteButton {
-    id addUpdate = AxsDialBeginAddUpdate(objc_getAssociatedObject(self, &AxsDialAddLCDKey));
     AxsDialRestoreDeleteButton(self);
-    @try { %orig; }
-    @finally { AxsDialEndAddUpdate(addUpdate); }
+    %orig;
     if (!AxsDialDualEnabled() ||
         [objc_getAssociatedObject(self, &AxsDialDeleteLayoutPendingKey) boolValue]) return;
     objc_setAssociatedObject(self, &AxsDialDeleteLayoutPendingKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -1191,49 +894,11 @@ static void AxsDialRefreshLater(id controller) {
 %end
 %end
 
-%group AxsSpringTwelveDialAddShortGroup
-%hook PHHandsetDialerLCDView
-- (void)updateAddAndDeleteButtonForText:(id)text name:(id)name animated:(BOOL)animated {
-    id controller = AxsDialBeginAddUpdate(self);
-    @try { %orig(text, name, animated); }
-    @finally { AxsDialEndAddUpdate(controller); }
-}
-%end
-%end
-
-%group AxsSpringTwelveDialAddLongGroup
-%hook PHHandsetDialerLCDView
-- (void)updateAddAndDeleteButtonForText:(id)text name:(id)name label:(id)label
-                           suggestion:(BOOL)suggestion animated:(BOOL)animated {
-    id controller = AxsDialBeginAddUpdate(self);
-    @try { %orig(text, name, label, suggestion, animated); }
-    @finally { AxsDialEndAddUpdate(controller); }
-}
-%end
-%end
-
-static void AxsDialInstallAddStateHooks(void) {
-    Class cls = NSClassFromString(@"PHHandsetDialerLCDView");
-    if (!cls) return;
-    AxsDialAddLCDClass = cls;
-    if (!AxsDialAddShortHooked && AxsDialExactSignature(cls,
-        NSSelectorFromString(@"updateAddAndDeleteButtonForText:name:animated:"), "v@:@@B")) {
-        %init(AxsSpringTwelveDialAddShortGroup);
-        AxsDialAddShortHooked = YES;
-    }
-    if (!AxsDialAddLongHooked && AxsDialExactSignature(cls,
-        NSSelectorFromString(@"updateAddAndDeleteButtonForText:name:label:suggestion:animated:"), "v@:@@@BB")) {
-        %init(AxsSpringTwelveDialAddLongGroup);
-        AxsDialAddLongHooked = YES;
-    }
-}
-
 static BOOL AxsSpringTwelveDialInstalled;
 static void AxsSpringTwelveDialInstall(void) {
+    if (AxsSpringTwelveDialInstalled) return;
     CFStringRef bundleID = CFBundleGetIdentifier(CFBundleGetMainBundle());
     if (!bundleID || !CFEqual(bundleID, CFSTR("com.apple.mobilephone"))) return;
-    AxsDialInstallAddStateHooks(); // A later image may provide the optional LCD class.
-    if (AxsSpringTwelveDialInstalled) return;
     Class dialerClass = NSClassFromString(@"DialerController");
     SEL loadSelector = @selector(viewDidLoad);
     SEL layoutSelector = @selector(viewDidLayoutSubviews);
