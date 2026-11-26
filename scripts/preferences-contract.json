@@ -1,127 +1,147 @@
 {
   "disableTodayView": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "disableAppLibrary": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "disableHomePullDownSearch": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "disableLockScreenCamera": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "autoDismissFaceID": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "disableNotificationWake": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "disableLockScreenTodayView": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "disableFlashlight": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "disableCamera": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "hideHomeBar": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "disableBottomHomeBarSwipe": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "hideWidgetLabels": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "hideLowBatteryAlert": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "hideHomeIconLabels": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "homeLeftPullDownNotificationCenter": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "homeRightPullDownControlCenter": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "noLockAfterRespring": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "disconnectWiFiBT": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "allowPasteWithoutPrompt": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "captureDualSimDialerEnabled": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "captureT9DialerEnabled": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "disablePhoneFavoritesTab": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "disablePhoneContactsTab": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "disablePhoneVoicemailTab": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   },
   "lsPowerMenuOnDesktop": {
     "cell": "PSSwitchCell",
-    "defaults": "com.axs.springtwelve",
+    "defaults": "com.haoge.springtwelve",
+    "default": false
+  },
+  "callRecordingEnabled": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.haoge.springtwelve",
+    "default": false
+  },
+  "callRecordingListEnabled": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.haoge.springtwelve",
+    "default": false
+  },
+  "captureReplaceFavoritesTab": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.haoge.springtwelve",
+    "default": false
+  },
+  "captureReplaceVoicemailTab": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.haoge.springtwelve",
     "default": false
   }
 }

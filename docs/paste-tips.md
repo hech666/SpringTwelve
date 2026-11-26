@@ -1,6 +1,6 @@
 # 粘贴提示与自动允许
 
-- 设置键 `allowPasteWithoutPrompt`，偏好域 `com.axs.springtwelve`，默认关闭；使用既有配置快照与刷新通知，不写入默认值。
+- 设置键 `allowPasteWithoutPrompt`，偏好域 `com.haoge.springtwelve`，默认关闭；使用既有配置快照与刷新通知，不写入默认值。
 - 开启后会自动允许粘贴并屏蔽提示，应用可能不经询问读取剪贴板。关闭后各 hook 恢复系统原实现，不撤销已完成授权。
 - 原始依据：用户上传 `禁用粘贴.zip` 中的 `Clipboard-PasteTip-Source/PasteTipHooks.xm` 与 Evidence 反汇编/解析结果；归档内 SHA256SUMS 的六项均校验通过。保留 reply(YES) 后 authorizationDidCompleteWithPasteAllowed:YES 的次序，以及 pasted 提示响应值 1，不自行猜测枚举名。
 - 主过滤器保留 SpringBoard / MobilePhone，并添加 druid / pasted 可执行文件；本模块仅在 SpringBoard、druid、pasted 安装。仅这三个宿主需要粘贴逻辑，不做全应用注入。

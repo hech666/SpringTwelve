@@ -1,4 +1,4 @@
-name: SpringTwelve Roothide
+name: 设置合集 Roothide
 on:
   push:
     branches: [main]
@@ -8,10 +8,11 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 35
+    timeout-minutes: 60
     env:
       THEOS: ${{ github.workspace }}/.theos-ci
       THEOS_PACKAGE_SCHEME: roothide
+      HAOGE_CALLRECORDER_LAME_PREFIX: ${{ github.workspace }}/MP3Helper/.build/arm64e/install
     steps:
       - uses: actions/checkout@v4
       - name: Select Xcode and host tools
@@ -27,9 +28,20 @@ jobs:
           git clone --depth 1 --filter=blob:none --sparse https://github.com/theos/sdks.git "$RUNNER_TEMP/theos-sdks"
           git -C "$RUNNER_TEMP/theos-sdks" sparse-checkout set iPhoneOS16.5.sdk
           cp -a "$RUNNER_TEMP/theos-sdks/iPhoneOS16.5.sdk" "$THEOS/sdks/"
-      - name: Verify preference navigation and key contract
-        run: python3 scripts/verify-preferences.py
-      - name: Build arm64e Roothide package without recording
+      - name: Build pinned arm64e LAME 3.100
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKROOT="$THEOS/sdks/iPhoneOS16.5.sdk" bash MP3Helper/build-lame-macos.sh
+      - name: Verify settings and recording source contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-preferences.py
+          python3 scripts/verify-haoge-recording.py
+          xcrun clang++ -std=gnu++17 -fobjc-arc -fblocks -Wall -Wextra -Werror -I Sources -framework Foundation tests/haoge-recording-filename-tests.mm -o "$RUNNER_TEMP/haoge-recording-filename-tests"
+          "$RUNNER_TEMP/haoge-recording-filename-tests"
+      - name: Build arm64e Roothide integrated package
         shell: bash
         run: |
           set -euo pipefail
@@ -44,7 +56,9 @@ jobs:
           python3 scripts/verify-package.py "$DEB"
       - uses: actions/upload-artifact@v4
         with:
-          name: SpringTwelve-Roothide-${{ github.run_number }}
-          path: packages/*.deb
+          name: SettingsCollection-Roothide-${{ github.run_number }}
+          path: |
+            packages/*.deb
+            artifacts/RealtimeRelink/**
           if-no-files-found: error
           retention-days: 30

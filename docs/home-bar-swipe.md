@@ -3,13 +3,13 @@
 ## 设置与边界
 
 - 位置：SpringTwelve → 禁用和隐藏 → **禁用横条左右滑动切换 App**。
-- 独立键：`disableBottomHomeBarSwipe`，域 `com.axs.springtwelve`，默认 **OFF**。
+- 独立键：`disableBottomHomeBarSwipe`，域 `com.haoge.springtwelve`，默认 **OFF**。
 - 与 `hideHomeBar`（隐藏 Home Bar）完全独立：隐藏横条不会自动禁用手势，禁用本手势不会自动隐藏横条。
-- 不新增配置读取器、持久化默认值或通知观察者；只读现有 `AxsSpringTwelveOn` 配置快照，沿用已有设置更新机制。
+- 不新增配置读取器、持久化默认值或通知观察者；只读现有 `HaogeSpringTwelveOn` 配置快照，沿用已有设置更新机制。
 
 ## Hook 语义
 
-实现位于 `Hooks/AxsSpringTwelveHomeBarSwipe.xm`，依据用户提供的 `DisableBottomHomeBarSwipe.xm`。仅迁移目标 Hook 的行为，不迁移附件中的旧配置域和加载适配器。
+实现位于 `Hooks/HaogeSpringTwelveHomeBarSwipe.xm`，依据用户提供的 `DisableBottomHomeBarSwipe.xm`。仅迁移目标 Hook 的行为，不迁移附件中的旧配置域和加载适配器。
 
 目标为 `SBHomeGestureFinalDestinationSwitcherModifier` 的实例方法 `-currentFinalDestination`。每次调用首先以 `NSInteger` 接收一次且仅一次 `%orig`，然后读取快照：
 

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>title</key>
+	<string>设置合集</string>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>label</key>
+			<string>电话设置</string>
+			<key>detail</key>
+			<string>HaogeSpringTwelvePhoneListController</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>label</key>
+			<string>禁用和隐藏</string>
+			<key>detail</key>
+			<string>HaogeSpringTwelveDisableHideListController</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>label</key>
+			<string>常规设置</string>
+			<key>detail</key>
+			<string>HaogeSpringTwelveGeneralListController</string>
+		</dict>
+	</array>
+</dict>
+</plist>

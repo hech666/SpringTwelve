@@ -5,9 +5,9 @@
 - `disablePhoneFavoritesTab`：禁用电话 App 个人收藏标签，默认 `false`。
 - `disablePhoneContactsTab`：禁用电话 App 通讯录标签，默认 `false`；不影响独立通讯录 App、联系人数据或拨号盘 T9。
 - `disablePhoneVoicemailTab`：禁用电话 App 语音留言标签，默认 `false`。
-- 三项独立工作，沿用 `com.axs.springtwelve` 的不可变配置快照、缺键回退 `NO` 和面板单写入方流程；不持久化默认值。
+- 三项独立工作，沿用 `com.haoge.springtwelve` 的不可变配置快照、缺键回退 `NO` 和面板单写入方流程；不持久化默认值。
 - 修改任一开关后，请完全结束并重新打开电话 App。没有主动退出、注销、重启设备或调用私有刷新方法。
-- 当前主包不包含录音标签替换；本次不改动独立录音插件。
+- 当前设置合集已将独立 5.2.0-4 录音源码合入主注入动态库；录音列表可替换个人收藏或语音留言。对应隐藏开关开启时隐藏优先，不强行恢复系统已移除的标签。
 - 最近通话、拨号键盘两个参数始终保留系统原值；三个可隐藏标签的开关关闭时也保留各自系统原值，不强制开启系统原本不显示的标签。
 
 ## 原始实现证据
@@ -23,7 +23,7 @@
 
 ## Hook 边界
 
-新文件：`Hooks/AxsSpringTwelvePhoneTabs.xm`。
+新文件：`Hooks/HaogeSpringTwelvePhoneTabs.xm`。
 
 仅在 `com.apple.mobilephone` 内、`PhoneTabBarController` 可解析时尝试安装：基础隐藏组独立校验五 BOOL 配置方法，可选切换回退组另行校验切换与查询方法。
 
@@ -37,7 +37,7 @@
 
 ## 验证及真机验收
 
-- plist 解析、键唯一性及三项默认关闭验证；新增通讯录键后电话设置为 5 项、禁用隐藏 12 项、常规 7 项，共 24 个非录音开关。
+- 当前设置为电话设置 9 项、禁用隐藏 13 项、常规 7 项，共 29 个开关（保留 25 个原开关，新增 4 个默认关闭的录音开关）。
 - 新 hook 的 Logos 预处理及共享 `arm64e-modern/clang++`、iPhoneOS 16.5 SDK、`arm64e-apple-ios15.0`、ARC、`-Wall -Werror` 语法预检通过；此检查不等同于完整链接/打包成功。
 - 本地完整 Theos 尝试受共享环境限制：`roothide` scheme 不存在；使用 `rootless` 预检完整工程时默认 modules 编译在 SDK pthread 初始化宏处失败。没有因此修改工程的 scheme、SDK、Makefile 或屏蔽警告；由主代理统一完成目标构建。
 - 未安装、注入或执行设备操作，iOS 16 真机尚未验证。

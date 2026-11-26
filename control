@@ -1,11 +1,11 @@
-Package: com.axs.springtwelve
-Name: 桌面十二项
+Package: com.haoge.springtwelve
+Name: 设置合集
 Version: 5.2.3
-Architecture: iphoneos-arm
-Description: 桌面十二项
-Maintainer: Axs
-Author: Axs
-Section: Axs-Tweaks
+Architecture: iphoneos-arm64e
+Description: 多款桌面与电话小功能汇总，轻量自定义，原生风格。
+Maintainer: Haoge
+Author: Haoge
+Section: Haoge-Tweaks
 Depends: mobilesubstrate, preferenceloader
-Icon: https://axs66.github.io/pro/icon/springtwelve.png
-Sileodepiction: https://axs66.github.io/pro/sileodepiction/springtwelve/js.json
+Conflicts: com.axs.springtwelve, com.axs.callrecorder
+Replaces: com.axs.springtwelve, com.axs.callrecorder

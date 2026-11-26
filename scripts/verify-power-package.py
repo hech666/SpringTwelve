@@ -44,16 +44,16 @@ with tempfile.TemporaryDirectory(prefix='st-power-verify-') as tmp:
     root=pathlib.Path(tmp)
     subprocess.run(['dpkg-deb','-x',str(package),tmp],check=True)
     dylibs=list(root.rglob('*.dylib'))
-    assert len(dylibs)==1 and dylibs[0].name=='AxsSpringTwelve.dylib'
+    assert len(dylibs)==1 and dylibs[0].name=='HaogeSpringTwelve.dylib'
     verify_macho(dylibs[0])
-    helpers=list(root.rglob('AxsSpringTwelvePowerHelper')); assert len(helpers)==1
+    helpers=list(root.rglob('HaogeSpringTwelvePowerHelper')); assert len(helpers)==1
     helper=helpers[0]
     verify_macho(helper)
     import tarfile, io, shutil
     payload = subprocess.check_output(['dpkg-deb', '--fsys-tarfile', str(package)])
     with tarfile.open(fileobj=io.BytesIO(payload)) as archive:
-        allowed_paths = {'usr/local/libexec/AxsSpringTwelvePowerHelper',
-                         'var/jb/usr/local/libexec/AxsSpringTwelvePowerHelper'}
+        allowed_paths = {'usr/local/libexec/HaogeSpringTwelvePowerHelper',
+                         'var/jb/usr/local/libexec/HaogeSpringTwelvePowerHelper'}
         entries = [e for e in archive.getmembers()
                    if e.name.removeprefix('./').lstrip('/') in allowed_paths]
         assert len(entries) == 1
@@ -68,9 +68,3 @@ with tempfile.TemporaryDirectory(prefix='st-power-verify-') as tmp:
                 'com.apple.private.xpc.launchd.userspace-reboot-now']:
         assert entitlements.get(key) is True, key
     print('Power helper ownership, setuid mode and dedicated entitlements PASS')
-    for name in ['MUtoolRecord','MUtoolMixer','AxsSpringTwelveMP3Mixer']:
-        assert not list(root.rglob(name)), ('Recording helper must not ship',name)
-    data = dylibs[0].read_bytes()
-    for marker in [b'AxsSpringTwelveCallRecorder', b'AxsSpringTwelveRecordingsController', b'callRecordingEnabled', b'captureReplaceFavoritesTab', b'CallRecordings']:
-        assert marker not in data, ('Recording code must not link',marker)
-    print('Recording code/helpers absent PASS')

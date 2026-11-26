@@ -8,7 +8,12 @@ case "$SCHEME" in
 esac
 export THEOS_PACKAGE_SCHEME="$SCHEME"
 export ARCHS="arm64e"
+export HAOGE_CALLRECORDER_LAME_PREFIX="$(pwd)/MP3Helper/.build/arm64e/install"
 python3 scripts/verify-preferences.py
+python3 scripts/verify-haoge-recording.py
+if [ ! -f MP3Helper/.build/arm64e/install/lib/libmp3lame.a ]; then
+    bash MP3Helper/build-lame-macos.sh
+fi
 make clean
 # dm.pl can retain host numeric uid/gid even when it writes root/wheel names.
 # Normalize archive ownership numerically; postinst separately reapplies setuid.

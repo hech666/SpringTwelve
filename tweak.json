@@ -1,15 +1,1 @@
-{
-  "schema": 1,
-  "name": "SpringTwelve",
-  "id": "springtwelve",
-  "display_name": "桌面十二项",
-  "class_prefix": "AxsSpringTwelve",
-  "symbol_prefix": "axs_springtwelve",
-  "package": "com.axs.springtwelve",
-  "bundle": "com.apple.springboard",
-  "sdk_version": "16.5",
-  "minimum_ios": "15.0",
-  "preferences": true,
-  "slider": false,
-  "github_actions": false
-}
+{"schema":1,"name":"HaogeSpringTwelve","id":"springtwelve","display_name":"设置合集","class_prefix":"HaogeSpringTwelve","symbol_prefix":"haoge_springtwelve","package":"com.haoge.springtwelve","bundle":"com.apple.springboard","sdk_version":"16.5","minimum_ios":"15.0","preferences":true,"slider":false,"github_actions":false}

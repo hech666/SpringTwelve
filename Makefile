@@ -5,17 +5,18 @@ INSTALL_TARGET_PROCESSES = SpringBoard MobilePhone
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = AxsSpringTwelve
+TWEAK_NAME = HaogeSpringTwelve
 # One injection dylib; each module initializes hooks only in its intended host process.
-AxsSpringTwelve_FILES = $(wildcard Hooks/*.xm Sources/*.m)
-AxsSpringTwelve_CFLAGS = -fobjc-arc -I$(THEOS_PROJECT_DIR)/Headers -I$(THEOS_PROJECT_DIR)/Sources
-AxsSpringTwelve_FRAMEWORKS = UIKit QuartzCore CoreGraphics CoreFoundation Foundation
-AxsSpringTwelve_LIBRARIES =
+HaogeSpringTwelve_FILES = $(wildcard Hooks/*.xm Sources/*.m Sources/*.mm)
+HaogeSpringTwelve_CFLAGS = -fobjc-arc -Wall -Wextra -I$(THEOS_PROJECT_DIR)/Headers -I$(THEOS_PROJECT_DIR)/Sources
+HaogeSpringTwelve_CCFLAGS = -std=gnu++17
+HaogeSpringTwelve_FRAMEWORKS = UIKit QuartzCore CoreGraphics CoreFoundation Foundation AVFoundation CoreTelephony Contacts CallKit
+HaogeSpringTwelve_LIBRARIES =
 ifeq ($(THEOS_PACKAGE_SCHEME),roothide)
-  AxsSpringTwelve_LIBRARIES += roothide
+  HaogeSpringTwelve_LIBRARIES += roothide
 endif
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 
-SUBPROJECTS += AxsSpringTwelvePrefs PowerHelper
+SUBPROJECTS += HaogeSpringTwelvePrefs PowerHelper HaogeRealtimeHelper
 include $(THEOS_MAKE_PATH)/aggregate.mk
