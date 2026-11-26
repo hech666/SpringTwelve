@@ -122,6 +122,20 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>label</key>
+			<string>禁用横条左右滑动切换 App</string>
+			<key>key</key>
+			<string>disableBottomHomeBarSwipe</string>
+			<key>defaults</key>
+			<string>com.axs.springtwelve</string>
+			<key>default</key>
+			<false/>
+			<key>footerText</key>
+			<string>独立禁用底部横条左右滑动切换 App，不隐藏横条；与“隐藏 Home Bar”分别控制。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
 			<string>隐藏小组件名称</string>
 			<key>key</key>
 			<string>hideWidgetLabels</string>

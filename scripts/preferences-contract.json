@@ -49,6 +49,11 @@
     "defaults": "com.axs.springtwelve",
     "default": false
   },
+  "disableBottomHomeBarSwipe": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
   "hideWidgetLabels": {
     "cell": "PSSwitchCell",
     "defaults": "com.axs.springtwelve",
