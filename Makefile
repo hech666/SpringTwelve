@@ -1,6 +1,8 @@
 TARGET := iphone:clang:16.5:15.0
 ARCHS ?= arm64e
 THEOS_PACKAGE_SCHEME ?= roothide
+DEBUG ?= 0
+FINALPACKAGE ?= 1
 INSTALL_TARGET_PROCESSES = SpringBoard MobilePhone
 
 include $(THEOS)/makefiles/common.mk

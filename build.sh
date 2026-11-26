@@ -14,8 +14,8 @@ python3 scripts/verify-haoge-recording.py
 if [ ! -f MP3Helper/.build/arm64e/install/lib/libmp3lame.a ]; then
     bash MP3Helper/build-lame-macos.sh
 fi
-make clean
+make clean DEBUG=0 FINALPACKAGE=1
 # dm.pl can retain host numeric uid/gid even when it writes root/wheel names.
 # Normalize archive ownership numerically; postinst separately reapplies setuid.
-make package THEOS_PACKAGE_SCHEME="$SCHEME" PACKAGE_VERSION="${PACKAGE_VERSION:-5.2.0}" _THEOS_PLATFORM_DPKG_DEB="$(pwd)/scripts/dpkg-deb-root" _THEOS_PLATFORM_DPKG_DEB_COMPRESSION=xz
+make package DEBUG=0 FINALPACKAGE=1 messages=yes THEOS_PACKAGE_SCHEME="$SCHEME" PACKAGE_VERSION="${PACKAGE_VERSION:-5.2.0}" _THEOS_PLATFORM_DPKG_DEB="$(pwd)/scripts/dpkg-deb-root" _THEOS_PLATFORM_DPKG_DEB_COMPRESSION=xz
 find packages -type f -name '*.deb' -print
