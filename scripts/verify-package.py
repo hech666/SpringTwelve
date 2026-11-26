@@ -23,16 +23,8 @@ with tempfile.TemporaryDirectory(prefix='haoge-package-verify-') as folder:
     subprocess.run([sys.executable, str(project / 'scripts/verify-preferences.py'), str(bundle)], check=True)
     prefs = bundle / 'HaogeSpringTwelvePrefs'
     data = prefs.read_bytes()
-    if data[:4] == b'\xcf\xfa\xed\xfe':
-        verify_macho(prefs)
-    else:
-        assert data[:4] == b'\xca\xfe\xba\xbe'
-        count = struct.unpack_from('>I', data, 4)[0]
-        slices = [data[o:o+n] for cpu,sub,o,n,a in
-                  (struct.unpack_from('>IIIII', data, 8 + i*20) for i in range(count))
-                  if (cpu,sub) == (0x100000c,0x80000002)]
-        assert len(slices) == 1
-        thin = root / 'prefs.arm64e'; thin.write_bytes(slices[0]); verify_macho(thin)
+    assert data[:4] == b'\xcf\xfa\xed\xfe', 'Settings panel must be a thin arm64e Mach-O'
+    verify_macho(prefs)
 
     dylibs = list(root.rglob('*.dylib'))
     assert len(dylibs) == 1 and dylibs[0].name == 'HaogeSpringTwelve.dylib'
