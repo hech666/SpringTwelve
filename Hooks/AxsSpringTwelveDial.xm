@@ -131,18 +131,39 @@ static NSString *AxsDialIdentityTitle(id identity, NSUInteger index) {
 
 static void AxsDialUpdateDualButtons(id controller) {
     UIView *callButton = AxsDialPart(controller, @"callButton");
+    UIView *host = AxsDialGet(controller, @"dialerView");
+    if (![host isKindOfClass:UIView.class] || ![callButton isDescendantOfView:host])
+        host = callButton.superview;
     NSArray *identities = AxsDialIdentities(controller);
-    if (!AxsDialDualEnabled() || identities.count < 2 || !callButton.superview ||
+    if (!AxsDialDualEnabled() || identities.count < 2 || !callButton.superview || !host ||
         CGRectGetWidth(callButton.bounds) < 20.0 || CGRectGetHeight(callButton.bounds) < 20.0) {
         AxsDialRemoveDualButtons(controller);
         return;
     }
 
+    // A native circular call button is an anchor, not the width of two buttons.
+    // Mount in dialerView so a narrow native wrapper cannot clip/reject touches.
+    CGRect anchor = [callButton convertRect:callButton.bounds toView:host];
+    CGRect available = UIEdgeInsetsInsetRect(host.bounds, host.safeAreaInsets);
+    CGFloat gap = 8.0;
+    CGFloat height = MIN(64.0, MAX(44.0, CGRectGetHeight(anchor)));
+    CGFloat width = MIN(MAX(76.0, height * 1.25), (CGRectGetWidth(available) - 24.0 - gap) / 2.0);
+    if (CGRectIsEmpty(anchor) || CGRectIsInfinite(anchor) || width < 44.0 ||
+        CGRectGetHeight(available) < height) {
+        AxsDialRemoveDualButtons(controller);
+        return;
+    }
+    CGFloat totalWidth = width * 2.0 + gap;
+    CGFloat x = MIN(MAX(CGRectGetMidX(anchor) - totalWidth / 2.0, CGRectGetMinX(available) + 12.0),
+                    CGRectGetMaxX(available) - totalWidth - 12.0);
+    CGFloat y = MIN(MAX(CGRectGetMidY(anchor) - height / 2.0, CGRectGetMinY(available)),
+                    CGRectGetMaxY(available) - height);
+
     NSArray *buttons = objc_getAssociatedObject(controller, &AxsDialDualButtonsKey);
     id oldCallButton = objc_getAssociatedObject(controller, &AxsDialOriginalButtonKey);
     id oldHost = objc_getAssociatedObject(controller, &AxsDialDualHostKey);
     if (![buttons isKindOfClass:[NSArray class]] || buttons.count != 2 ||
-        oldCallButton != callButton || oldHost != callButton.superview) {
+        oldCallButton != callButton || oldHost != host) {
         AxsDialRemoveDualButtons(controller);
         BOOL originalHidden = callButton.hidden;
         NSMutableArray *created = [NSMutableArray arrayWithCapacity:2];
@@ -161,35 +182,27 @@ static void AxsDialUpdateDualButtons(id controller) {
              forControlEvents:UIControlEventTouchUpInside];
             objc_setAssociatedObject(button, &AxsDialIdentityKey, identities[index],
                                      OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            [callButton.superview addSubview:button];
+            [host addSubview:button];
             [created addObject:button];
         }
         buttons = [created copy];
         objc_setAssociatedObject(controller, &AxsDialDualButtonsKey, buttons, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        objc_setAssociatedObject(controller, &AxsDialDualHostKey, callButton.superview, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(controller, &AxsDialDualHostKey, host, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(controller, &AxsDialOriginalButtonKey, callButton, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(controller, &AxsDialOriginalHiddenKey, @(originalHidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        callButton.hidden = YES;
     }
 
-    CGRect originalFrame = callButton.frame;
-    CGFloat gap = 2.0;
-    CGFloat half = (CGRectGetWidth(originalFrame) - gap) / 2.0;
-    // The call button frame is not guaranteed to be a wide pill; derive a
-    // landscape pill ourselves so the two halves are never tall/narrow.
-    CGFloat pillHeight = MIN(54.0, half);
-    CGFloat pillY = CGRectGetMidY(originalFrame) - pillHeight / 2.0;
+    callButton.hidden = YES; // Phone may restore the native button during layout.
     for (NSUInteger index = 0; index < 2; index++) {
         UIButton *button = buttons[index];
         id identity = identities[index];
         objc_setAssociatedObject(button, &AxsDialIdentityKey, identity, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        button.frame = CGRectMake(CGRectGetMinX(originalFrame) + index * (half + gap),
-                                  pillY, half, pillHeight);
-        button.layer.cornerRadius = pillHeight / 2.0;
+        button.frame = CGRectMake(x + index * (width + gap), y, width, height);
+        button.layer.cornerRadius = height / 2.0;
         [button setTitle:AxsDialIdentityTitle(identity, index) forState:UIControlStateNormal];
         button.accessibilityLabel = AxsDialIdentityTitle(identity, index);
         button.hidden = NO;
-        [callButton.superview bringSubviewToFront:button];
+        [host bringSubviewToFront:button];
     }
 }
 
@@ -674,7 +687,6 @@ static void AxsDialRefreshLater(id controller) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         id controller = weakController;
         if (!controller) return;
-        AxsDialUpdateDualButtons(controller);
         AxsDialEnsureT9Observer(controller, AxsDialPart(controller, @"lcdView"));
         AxsDialRefreshT9(controller);
     });
@@ -690,6 +702,8 @@ static void AxsDialRefreshLater(id controller) {
 
 - (void)viewWillAppear:(BOOL)animated {
     %orig(animated);
+    [AxsDialControllers addObject:self];
+    AxsDialUpdateDualButtons(self);
     objc_setAssociatedObject(self, &AxsDialT9SuppressedKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(self, &AxsDialT9QueryKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     AxsDialRefreshT9(self);
@@ -697,6 +711,16 @@ static void AxsDialRefreshLater(id controller) {
 
 - (void)viewDidAppear:(BOOL)animated {
     %orig(animated);
+    [AxsDialControllers addObject:self];
+    AxsDialUpdateDualButtons(self);
+    // Sender identities may finish loading after the first appearance callback.
+    // One visible-page follow-up, not an unbounded layout/retry loop.
+    __weak id weakController = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        id controller = weakController;
+        if (controller && [controller isViewLoaded] && ((UIViewController *)controller).view.window)
+            AxsDialUpdateDualButtons(controller);
+    });
     objc_setAssociatedObject(self, &AxsDialT9SuppressedKey, @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(self, &AxsDialT9QueryKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     AxsDialRefreshT9(self);
@@ -826,6 +850,7 @@ static void AxsDialPreferencesChanged(void) {
         return;
     }
     for (id controller in AxsDialControllers.allObjects) {
+        AxsDialUpdateDualButtons(controller);
         objc_setAssociatedObject(controller, &AxsDialT9QueryKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         NSUInteger generation = [objc_getAssociatedObject(controller, &AxsDialT9GenerationKey) unsignedIntegerValue] + 1;
         objc_setAssociatedObject(controller, &AxsDialT9GenerationKey, @(generation), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -850,6 +875,7 @@ static void AxsDialApplicationDidBecomeActive(void) {
     for (id controller in AxsDialControllers.allObjects) {
         if ([objc_getAssociatedObject(controller, &AxsDialT9SuppressedKey) boolValue]) continue;
         if (![controller isViewLoaded] || ((UIViewController *)controller).view.window == nil) continue;
+        AxsDialUpdateDualButtons(controller);
         objc_setAssociatedObject(controller, &AxsDialT9QueryKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         objc_setAssociatedObject(controller, &AxsDialT9RetryCountKey, @0, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         AxsDialRefreshT9(controller);
