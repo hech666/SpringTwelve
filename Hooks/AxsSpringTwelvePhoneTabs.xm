@@ -61,10 +61,11 @@ static BOOL AxsSpringTwelvePhoneTabFallbackMatches(Class cls) {
                 keypadTab:(BOOL)keypad
             voicemailTab:(BOOL)voicemail {
     BOOL hideFavorites = AxsSpringTwelveOn(@"disablePhoneFavoritesTab");
+    BOOL hideContacts = AxsSpringTwelveOn(@"disablePhoneContactsTab");
     BOOL hideVoicemail = AxsSpringTwelveOn(@"disablePhoneVoicemailTab");
     %orig(hideFavorites ? NO : favorites,
           recents,
-          contacts,
+          hideContacts ? NO : contacts,
           keypad,
           hideVoicemail ? NO : voicemail);
 }
@@ -77,6 +78,7 @@ static BOOL AxsSpringTwelvePhoneTabFallbackMatches(Class cls) {
 
 - (void)switchToTab:(int)tab {
     BOOL hidingTab = AxsSpringTwelveOn(@"disablePhoneFavoritesTab") ||
+                     AxsSpringTwelveOn(@"disablePhoneContactsTab") ||
                      AxsSpringTwelveOn(@"disablePhoneVoicemailTab");
     if (hidingTab && ![self viewControllerForTabViewType:tab]) {
         for (int candidate = 1; candidate <= 5; candidate++) {

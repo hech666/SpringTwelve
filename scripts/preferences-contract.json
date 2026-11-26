@@ -104,6 +104,11 @@
     "defaults": "com.axs.springtwelve",
     "default": false
   },
+  "disablePhoneContactsTab": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.axs.springtwelve",
+    "default": false
+  },
   "disablePhoneVoicemailTab": {
     "cell": "PSSwitchCell",
     "defaults": "com.axs.springtwelve",

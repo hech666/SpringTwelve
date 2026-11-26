@@ -52,6 +52,20 @@
 			<key>cell</key>
 			<string>PSSwitchCell</string>
 			<key>label</key>
+			<string>禁用电话 App 通讯录标签</string>
+			<key>key</key>
+			<string>disablePhoneContactsTab</string>
+			<key>defaults</key>
+			<string>com.axs.springtwelve</string>
+			<key>default</key>
+			<false/>
+			<key>footerText</key>
+			<string>仅隐藏电话 App 内的通讯录标签，不影响独立通讯录 App；更改后请完全结束并重新打开电话 App。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
 			<string>禁用电话 App 语音留言标签</string>
 			<key>key</key>
 			<string>disablePhoneVoicemailTab</string>
