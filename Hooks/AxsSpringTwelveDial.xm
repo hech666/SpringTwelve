@@ -145,15 +145,16 @@ static void AxsDialUpdateDualButtons(id controller) {
     // Mount in dialerView so a narrow native wrapper cannot clip/reject touches.
     CGRect anchor = [callButton convertRect:callButton.bounds toView:host];
     CGRect available = UIEdgeInsetsInsetRect(host.bounds, host.safeAreaInsets);
-    CGFloat gap = 8.0;
-    CGFloat height = MIN(64.0, MAX(44.0, CGRectGetHeight(anchor)));
-    CGFloat width = MIN(MAX(76.0, height * 1.25), (CGRectGetWidth(available) - 24.0 - gap) / 2.0);
-    if (CGRectIsEmpty(anchor) || CGRectIsInfinite(anchor) || width < 44.0 ||
+    CGFloat gap = 18.0;
+    CGFloat height = 48.0;
+    CGFloat totalWidth = MIN(CGRectGetWidth(available) - 24.0,
+                             MIN(320.0, MAX(240.0, CGRectGetWidth(available) * 0.72)));
+    CGFloat width = (totalWidth - gap) / 2.0;
+    if (CGRectIsEmpty(anchor) || CGRectIsInfinite(anchor) || width < 96.0 ||
         CGRectGetHeight(available) < height) {
         AxsDialRemoveDualButtons(controller);
         return;
     }
-    CGFloat totalWidth = width * 2.0 + gap;
     CGFloat x = MIN(MAX(CGRectGetMidX(anchor) - totalWidth / 2.0, CGRectGetMinX(available) + 12.0),
                     CGRectGetMaxX(available) - totalWidth - 12.0);
     CGFloat y = MIN(MAX(CGRectGetMidY(anchor) - height / 2.0, CGRectGetMinY(available)),
