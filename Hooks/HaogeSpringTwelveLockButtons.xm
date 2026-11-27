@@ -1,4 +1,3 @@
-#import <Foundation/Foundation.h>
 #import "HaogeSpringTwelveSwitches.h"
 
 // Verified against SystemBox 1.5-8end and the standalone LockButtons test.

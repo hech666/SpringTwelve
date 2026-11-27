@@ -30,13 +30,6 @@ static BOOL haoge_springtwelve_prefsSignature(id target, SEL selector, char resu
 
 @implementation HaogeSpringTwelveRootListController
 
-- (void)viewDidLoad {
-    [super viewDidLoad];
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
-        initWithTitle:@"注销" style:UIBarButtonItemStylePlain
-        target:self action:@selector(haoge_springtwelve_requestLogout:)];
-}
-
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     // Reapply after Preferences rebuilds the navigation item on appearance.
@@ -124,9 +117,8 @@ static BOOL haoge_springtwelve_prefsSignature(id target, SEL selector, char resu
 
 - (NSMutableArray *)specifiers {
     if (!_specifiers) {
-        NSMutableArray *items = [[self loadSpecifiersFromPlistName:[self haoge_springtwelve_specifierPlistName]
-                                                           target:self] mutableCopy];
-        _specifiers = items;
+        _specifiers = [[self loadSpecifiersFromPlistName:[self haoge_springtwelve_specifierPlistName]
+                                               target:self] mutableCopy];
     }
     return _specifiers;
 }

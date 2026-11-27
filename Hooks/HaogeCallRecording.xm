@@ -14,7 +14,7 @@
 #import <unistd.h>
 #import "HaogeCallRecorderPaths.h"
 #import "HaogeSpringTwelvePreferences.h"
-#import "HaogeCallRecorderSwitches.h"
+#import "HaogeSpringTwelveSwitches.h"
 #import "HaogeCallRecorderControl.h"
 #import "HaogeCallRecorderNamingContext.h"
 
@@ -243,18 +243,12 @@ static NSString *HaogeCallRecorderResolveHelper(NSString *name) {
     return nil;
 }
 
-static BOOL HaogeCallRecorderSpawn(NSString *path, NSArray<NSString *> *arguments, pid_t *pidOut, int *errorOut) {
-    if (!path.length || !pidOut || arguments.count == 0) {
-        if (errorOut) *errorOut = EINVAL;
-        return NO;
-    }
+static int HaogeCallRecorderSpawn(NSString *path, NSArray<NSString *> *arguments, pid_t *pidOut) {
+    if (!path.length || !pidOut || arguments.count == 0) return EINVAL;
     NSMutableArray<NSString *> *argvStrings = [NSMutableArray arrayWithObject:path];
     [argvStrings addObjectsFromArray:arguments];
     char **argv = (char **)calloc(argvStrings.count + 1, sizeof(char *));
-    if (!argv) {
-        if (errorOut) *errorOut = ENOMEM;
-        return NO;
-    }
+    if (!argv) return ENOMEM;
     for (NSUInteger i = 0; i < argvStrings.count; i++) argv[i] = (char *)argvStrings[i].fileSystemRepresentation;
     pid_t pid = 0;
     // Match the original coordinator: do not inherit SpringBoard's injection
@@ -271,10 +265,8 @@ static BOOL HaogeCallRecorderSpawn(NSString *path, NSArray<NSString *> *argument
     if (actionsInitialized) posix_spawn_file_actions_destroy(&actions);
     if (logFD >= 0) close(logFD);
     free(argv);
-    if (errorOut) *errorOut = error;
-    if (error != 0) return NO;
-    *pidOut = pid;
-    return YES;
+    if (!error) *pidOut = pid;
+    return error;
 }
 
 @implementation HaogeCallRecorderCallRecorder
@@ -300,7 +292,7 @@ static BOOL HaogeCallRecorderSpawn(NSString *path, NSArray<NSString *> *argument
 
 - (void)haoge_callrecorder_preferencesChanged:(NSNotification *)notification {
     dispatch_async(_haoge_callrecorder_queue, ^{
-        if (!HaogeCallRecorderOn(@"callRecordingEnabled") && self->_haoge_callrecorder_active)
+        if (!HaogeSpringTwelveOn(@"callRecordingEnabled") && self->_haoge_callrecorder_active)
             [self haoge_callrecorder_stopLockedWithReason:@"设置已关闭"];
     });
 }
@@ -333,7 +325,7 @@ static BOOL HaogeCallRecorderSpawn(NSString *path, NSArray<NSString *> *argument
                 if (!otherConnected) [recorder haoge_callrecorder_handleCallStatus:5];
             }
         };
-        HaogeCallRecorderRecordLog(@"module loaded; cellular fallback installed; enabled=%d", HaogeCallRecorderOn(@"callRecordingEnabled"));
+        HaogeCallRecorderRecordLog(@"module loaded; cellular fallback installed; enabled=%d", HaogeSpringTwelveOn(@"callRecordingEnabled"));
         void *handle = dlopen("/System/Library/Frameworks/CoreTelephony.framework/CoreTelephony", RTLD_LAZY | RTLD_LOCAL);
         HaogeCallRecorderCTGetDefault getDefault = handle ? (HaogeCallRecorderCTGetDefault)dlsym(handle, "CTTelephonyCenterGetDefault") : NULL;
         HaogeCallRecorderCTAddObserver addObserver = handle ? (HaogeCallRecorderCTAddObserver)dlsym(handle, "CTTelephonyCenterAddObserver") : NULL;
@@ -394,7 +386,7 @@ static BOOL HaogeCallRecorderSpawn(NSString *path, NSArray<NSString *> *argument
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,2*NSEC_PER_SEC),_haoge_callrecorder_queue, ^{ [self haoge_callrecorder_probeGeneration:generation]; });
 }
 - (void)haoge_callrecorder_startLocked {
-    if (_haoge_callrecorder_active || _haoge_callrecorder_finishing || !HaogeCallRecorderOn(@"callRecordingEnabled")) return;
+    if (_haoge_callrecorder_active || _haoge_callrecorder_finishing || !HaogeSpringTwelveOn(@"callRecordingEnabled")) return;
     NSString *helper=HaogeCallRecorderResolveHelper(@"HaogeCallRecorderRealtime");
     NSString *directory=haoge_callrecorder_recordingDirectory();
     if (!helper || ![NSFileManager.defaultManager createDirectoryAtPath:directory withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions:@0700} error:NULL]) {
@@ -404,8 +396,8 @@ static BOOL HaogeCallRecorderSpawn(NSString *path, NSArray<NSString *> *argument
     NSString *name=[NSString stringWithFormat:@"HaogeSpringTwelve-%@.mp3",NSUUID.UUID.UUIDString];
     NSString *output=[directory stringByAppendingPathComponent:name];
     _haoge_callrecorder_statusPath=[[directory stringByAppendingPathComponent:@"Diagnostics"] stringByAppendingPathComponent:[name stringByAppendingString:@".status"]];
-    pid_t pid=0;int error=0;
-    if (!HaogeCallRecorderSpawn(helper,@[output],&pid,&error)) {
+    pid_t pid=0;int error=HaogeCallRecorderSpawn(helper,@[output],&pid);
+    if (error) {
         HaogeCallRecorderRecordLog(@"realtime spawn failed errno=%d",error);
         dispatch_async(dispatch_get_main_queue(), ^{ [self->_haoge_callrecorder_indicator haoge_callrecorder_showFailure:@"无法启动采集"]; });return;
     }

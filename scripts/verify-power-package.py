@@ -37,12 +37,7 @@ def verify_macho(path):
     assert checked>0
     print(path.name, 'arm64e subtype=0x80000002;', checked, 'signature page hashes PASS')
 
-package=pathlib.Path(sys.argv[1])
-print('Package SHA256',hashlib.sha256(package.read_bytes()).hexdigest())
-print(subprocess.check_output(['dpkg-deb','-f',str(package),'Package','Version','Architecture'],text=True))
-with tempfile.TemporaryDirectory(prefix='st-power-verify-') as tmp:
-    root=pathlib.Path(tmp)
-    subprocess.run(['dpkg-deb','-x',str(package),tmp],check=True)
+def verify_power_package(package, root):
     dylibs=list(root.rglob('*.dylib'))
     assert len(dylibs)==1 and dylibs[0].name=='HaogeSpringTwelve.dylib'
     verify_macho(dylibs[0])
@@ -68,3 +63,12 @@ with tempfile.TemporaryDirectory(prefix='st-power-verify-') as tmp:
                 'com.apple.private.xpc.launchd.userspace-reboot-now']:
         assert entitlements.get(key) is True, key
     print('Power helper ownership, setuid mode and dedicated entitlements PASS')
+
+if __name__ == '__main__':
+    package=pathlib.Path(sys.argv[1])
+    print('Package SHA256',hashlib.sha256(package.read_bytes()).hexdigest())
+    print(subprocess.check_output(['dpkg-deb','-f',str(package),'Package','Version','Architecture'],text=True))
+    with tempfile.TemporaryDirectory(prefix='st-power-verify-') as tmp:
+        root=pathlib.Path(tmp)
+        subprocess.run(['dpkg-deb','-x',str(package),tmp],check=True)
+        verify_power_package(package, root)

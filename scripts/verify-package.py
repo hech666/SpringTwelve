@@ -4,7 +4,8 @@ from pathlib import Path
 import hashlib, plistlib, re, runpy, struct, subprocess, sys, tarfile, tempfile
 
 project = Path(__file__).resolve().parent.parent
-verify_macho = runpy.run_path(str(project / 'scripts/verify-power-package.py'))['verify_macho']
+power = runpy.run_path(str(project / 'scripts/verify-power-package.py'))
+verify_macho = power['verify_macho']
 package = Path(sys.argv[1]).resolve()
 def field(name):
     return subprocess.check_output(['dpkg-deb', '-f', str(package), name], text=True).strip()
@@ -17,13 +18,12 @@ assert field('Description') == '多款桌面与电话小功能汇总，轻量自
 with tempfile.TemporaryDirectory(prefix='haoge-package-verify-') as folder:
     root = Path(folder)
     subprocess.run(['dpkg-deb', '-x', str(package), str(root)], check=True)
+    power['verify_power_package'](package, root)
     bundles = list(root.rglob('HaogeSpringTwelvePrefs.bundle'))
     assert len(bundles) == 1
     bundle = bundles[0]
     subprocess.run([sys.executable, str(project / 'scripts/verify-preferences.py'), str(bundle)], check=True)
     prefs = bundle / 'HaogeSpringTwelvePrefs'
-    data = prefs.read_bytes()
-    assert data[:4] == b'\xcf\xfa\xed\xfe', 'Settings panel must be a thin arm64e Mach-O'
     verify_macho(prefs)
 
     dylibs = list(root.rglob('*.dylib'))

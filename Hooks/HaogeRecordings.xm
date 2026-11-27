@@ -12,7 +12,7 @@
 #import <stdlib.h>
 #import <string.h>
 #import "HaogeSpringTwelvePreferences.h"
-#import "HaogeCallRecorderSwitches.h"
+#import "HaogeSpringTwelveSwitches.h"
 #import "HaogeCallRecorderPaths.h"
 #import "HaogeCallRecorderRecordingAccess.h"
 #import "HaogeCallRecorderPlaybackSession.h"
@@ -28,7 +28,6 @@
 @implementation HaogeCallRecorderRecording
 @end
 
-static NSString * const HaogeCallRecorderRecordingsChanged = HaogeSpringTwelvePreferencesChanged;
 static NSString * const HaogeCallRecorderRecordingStateChanged = @"com.haoge.springtwelve.recording.call-recording-state";
 static NSURL *HaogeCallRecorderRecordingsURL(void) {
     // Shared user-data path is the real mobile Documents folder on every scheme.
@@ -304,7 +303,7 @@ static BOOL HaogeCallRecorderDeleteRecording(HaogeCallRecorderRecording *record,
         [buttons.heightAnchor constraintGreaterThanOrEqualToConstant:44]
     ]];
     NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
-    [center addObserver:self selector:@selector(haoge_callrecorder_preferencesChanged:) name:HaogeCallRecorderRecordingsChanged object:nil];
+    [center addObserver:self selector:@selector(haoge_callrecorder_preferencesChanged:) name:HaogeSpringTwelvePreferencesChanged object:nil];
     [center addObserver:self selector:@selector(haoge_callrecorder_preferencesChanged:) name:HaogeCallRecorderRecordingStateChanged object:nil];
     [center addObserver:self selector:@selector(haoge_callrecorder_suspend:) name:UIApplicationWillResignActiveNotification object:nil];
     [center addObserver:self selector:@selector(haoge_callrecorder_preferencesChanged:) name:UIApplicationDidBecomeActiveNotification object:nil];
@@ -339,7 +338,7 @@ static BOOL HaogeCallRecorderDeleteRecording(HaogeCallRecorderRecording *record,
 }
 - (void)haoge_callrecorder_reload {
     NSUInteger token = ++_haoge_callrecorder_loadToken;
-    BOOL enabled = HaogeCallRecorderOn(@"callRecordingListEnabled");
+    BOOL enabled = HaogeSpringTwelveOn(@"callRecordingListEnabled");
     self.navigationItem.rightBarButtonItem.enabled = enabled;
     if (!enabled) {
         [self haoge_callrecorder_stopPlayback];
@@ -357,7 +356,7 @@ static BOOL HaogeCallRecorderDeleteRecording(HaogeCallRecorderRecording *record,
             dispatch_async(dispatch_get_main_queue(), ^{
                 HaogeCallRecorderRecordingListViewController *owner = weakSelf;
                 if (!owner || token != owner->_haoge_callrecorder_loadToken) return;
-                owner->_haoge_callrecorder_records = HaogeCallRecorderOn(@"callRecordingListEnabled") ? records : @[];
+                owner->_haoge_callrecorder_records = HaogeSpringTwelveOn(@"callRecordingListEnabled") ? records : @[];
                 owner->_haoge_callrecorder_indexError = error.localizedDescription;
                 [owner haoge_callrecorder_filter];
                 [owner->_haoge_callrecorder_table.refreshControl endRefreshing];
@@ -374,7 +373,7 @@ static BOOL HaogeCallRecorderDeleteRecording(HaogeCallRecorderRecording *record,
             [date rangeOfString:query options:NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch].location != NSNotFound) [filtered addObject:record];
     }
     _haoge_callrecorder_filtered = filtered;
-    if (!HaogeCallRecorderOn(@"callRecordingListEnabled")) _haoge_callrecorder_empty.text = @"录音列表已关闭";
+    if (!HaogeSpringTwelveOn(@"callRecordingListEnabled")) _haoge_callrecorder_empty.text = @"录音列表已关闭";
     else if (_haoge_callrecorder_indexError.length) _haoge_callrecorder_empty.text = [@"无法读取录音目录：\n" stringByAppendingString:_haoge_callrecorder_indexError];
     else _haoge_callrecorder_empty.text = query.length ? @"没有匹配的录音" : @"暂无兼容录音\n此实验工程兼容已有 SpringTwelve 录音文件。";
     _haoge_callrecorder_empty.hidden = filtered.count != 0;
@@ -402,7 +401,7 @@ static BOOL HaogeCallRecorderDeleteRecording(HaogeCallRecorderRecording *record,
         [self haoge_callrecorder_prepare:_haoge_callrecorder_filtered[(NSUInteger)indexPath.row] share:NO];
 }
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if ((NSUInteger)indexPath.row >= _haoge_callrecorder_filtered.count || !HaogeCallRecorderOn(@"callRecordingListEnabled")) return nil;
+    if ((NSUInteger)indexPath.row >= _haoge_callrecorder_filtered.count || !HaogeSpringTwelveOn(@"callRecordingListEnabled")) return nil;
     HaogeCallRecorderRecording *record = _haoge_callrecorder_filtered[(NSUInteger)indexPath.row];
     __weak HaogeCallRecorderRecordingListViewController *weakSelf = self;
     UIContextualAction *remove = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"删除"
@@ -420,18 +419,18 @@ static BOOL HaogeCallRecorderDeleteRecording(HaogeCallRecorderRecording *record,
     return configuration;
 }
 - (void)haoge_callrecorder_confirmDelete:(HaogeCallRecorderRecording *)record {
-    if (!HaogeCallRecorderOn(@"callRecordingListEnabled") || self.presentedViewController) return;
+    if (!HaogeSpringTwelveOn(@"callRecordingListEnabled") || self.presentedViewController) return;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"删除此录音？" message:record.haoge_callrecorder_name preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     __weak HaogeCallRecorderRecordingListViewController *weakSelf = self;
     [alert addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         HaogeCallRecorderRecordingListViewController *owner = weakSelf;
-        if (!owner || !HaogeCallRecorderOn(@"callRecordingListEnabled")) return;
+        if (!owner || !HaogeSpringTwelveOn(@"callRecordingListEnabled")) return;
         // Cancel pending playback/export too, so deletion cannot resurrect a stale selection.
         [owner haoge_callrecorder_stopPlayback];
         dispatch_async(owner->_haoge_callrecorder_io, ^{
             NSError *error = nil;
-            if (HaogeCallRecorderOn(@"callRecordingListEnabled")) HaogeCallRecorderDeleteRecording(record, &error);
+            if (HaogeSpringTwelveOn(@"callRecordingListEnabled")) HaogeCallRecorderDeleteRecording(record, &error);
             dispatch_async(dispatch_get_main_queue(), ^{
                 [weakSelf haoge_callrecorder_reload];
                 if (error) [weakSelf haoge_callrecorder_error:error.localizedDescription];
@@ -445,7 +444,7 @@ static BOOL HaogeCallRecorderDeleteRecording(HaogeCallRecorderRecording *record,
         dispatch_async(dispatch_get_main_queue(), ^{ [self haoge_callrecorder_preferencesChanged:note]; });
         return;
     }
-    if (!HaogeCallRecorderOn(@"callRecordingListEnabled")) [self haoge_callrecorder_stopPlayback];
+    if (!HaogeSpringTwelveOn(@"callRecordingListEnabled")) [self haoge_callrecorder_stopPlayback];
     if (self.isViewLoaded) [self haoge_callrecorder_reload];
 }
 - (void)haoge_callrecorder_suspend:(NSNotification *)note {
@@ -456,17 +455,17 @@ static BOOL HaogeCallRecorderDeleteRecording(HaogeCallRecorderRecording *record,
     [self haoge_callrecorder_stopPlayback];
 }
 - (void)haoge_callrecorder_prepare:(HaogeCallRecorderRecording *)record share:(BOOL)share {
-    if (!HaogeCallRecorderOn(@"callRecordingListEnabled") || self.presentedViewController) return;
+    if (!HaogeSpringTwelveOn(@"callRecordingListEnabled") || self.presentedViewController) return;
     if (!share) [self haoge_callrecorder_stopPlayback];
     NSUInteger token = ++_haoge_callrecorder_actionToken;
     __weak HaogeCallRecorderRecordingListViewController *weakSelf = self;
     dispatch_async(_haoge_callrecorder_io, ^{
         @autoreleasepool {
             NSError *error = nil;
-            NSURL *snapshot = HaogeCallRecorderOn(@"callRecordingListEnabled") ? HaogeCallRecorderRecordingSnapshot(record, &error) : nil;
+            NSURL *snapshot = HaogeSpringTwelveOn(@"callRecordingListEnabled") ? HaogeCallRecorderRecordingSnapshot(record, &error) : nil;
             dispatch_async(dispatch_get_main_queue(), ^{
                 HaogeCallRecorderRecordingListViewController *owner = weakSelf;
-                if (!owner || token != owner->_haoge_callrecorder_actionToken || !HaogeCallRecorderOn(@"callRecordingListEnabled") || !owner.viewIfLoaded.window) {
+                if (!owner || token != owner->_haoge_callrecorder_actionToken || !HaogeSpringTwelveOn(@"callRecordingListEnabled") || !owner.viewIfLoaded.window) {
                     HaogeCallRecorderRemoveRecordingSnapshot(snapshot);
                     return;
                 }
@@ -526,7 +525,7 @@ static BOOL HaogeCallRecorderDeleteRecording(HaogeCallRecorderRecording *record,
     });
 }
 - (void)haoge_callrecorder_togglePlayback {
-    if (!HaogeCallRecorderOn(@"callRecordingListEnabled")) { [self haoge_callrecorder_stopPlayback]; return; }
+    if (!HaogeSpringTwelveOn(@"callRecordingListEnabled")) { [self haoge_callrecorder_stopPlayback]; return; }
     if (_haoge_callrecorder_player.isPlaying) {
         [_haoge_callrecorder_player pause];
         [_haoge_callrecorder_audioSession haoge_callrecorder_finish];
@@ -557,7 +556,7 @@ static BOOL HaogeCallRecorderDeleteRecording(HaogeCallRecorderRecording *record,
     [self haoge_callrecorder_updatePlayer];
 }
 - (void)haoge_callrecorder_seekChanged {
-    if (HaogeCallRecorderOn(@"callRecordingListEnabled") && _haoge_callrecorder_player)
+    if (HaogeSpringTwelveOn(@"callRecordingListEnabled") && _haoge_callrecorder_player)
         _haoge_callrecorder_player.currentTime = _haoge_callrecorder_seek.value;
     [self haoge_callrecorder_updatePlayer];
 }
@@ -565,7 +564,7 @@ static BOOL HaogeCallRecorderDeleteRecording(HaogeCallRecorderRecording *record,
     if (_haoge_callrecorder_selected) [self haoge_callrecorder_prepare:_haoge_callrecorder_selected share:YES];
 }
 - (void)haoge_callrecorder_updatePlayer {
-    BOOL available = _haoge_callrecorder_player != nil && HaogeCallRecorderOn(@"callRecordingListEnabled");
+    BOOL available = _haoge_callrecorder_player != nil && HaogeSpringTwelveOn(@"callRecordingListEnabled");
     _haoge_callrecorder_play.enabled = available;
     _haoge_callrecorder_stop.enabled = available;
     _haoge_callrecorder_share.enabled = available;
@@ -596,7 +595,7 @@ static BOOL HaogeCallRecorderDeleteRecording(HaogeCallRecorderRecording *record,
     });
 }
 - (void)haoge_callrecorder_openRecordingsFolder {
-    if (!HaogeCallRecorderOn(@"callRecordingListEnabled") || self.presentedViewController) return;
+    if (!HaogeSpringTwelveOn(@"callRecordingListEnabled") || self.presentedViewController) return;
     // Filza has its own sandbox/permissions. Do not gate its URL on Phone's directory access.
     NSURLComponents *components = [NSURLComponents new];
     components.scheme = @"filza";
@@ -689,9 +688,9 @@ static BOOL HaogeCallRecorderRecordingTabDisabled(HaogeCallRecorderRecordingTabR
     return NO;
 }
 static BOOL HaogeCallRecorderRecordingShouldReplace(HaogeCallRecorderRecordingTabRole role) {
-    if (!HaogeCallRecorderOn(@"callRecordingListEnabled") || HaogeCallRecorderRecordingTabDisabled(role)) return NO;
-    if (role == HaogeCallRecorderRecordingTabFavorites) return HaogeCallRecorderOn(@"captureReplaceFavoritesTab");
-    if (role == HaogeCallRecorderRecordingTabVoicemail) return HaogeCallRecorderOn(@"captureReplaceVoicemailTab");
+    if (!HaogeSpringTwelveOn(@"callRecordingListEnabled") || HaogeCallRecorderRecordingTabDisabled(role)) return NO;
+    if (role == HaogeCallRecorderRecordingTabFavorites) return HaogeSpringTwelveOn(@"captureReplaceFavoritesTab");
+    if (role == HaogeCallRecorderRecordingTabVoicemail) return HaogeSpringTwelveOn(@"captureReplaceVoicemailTab");
     return NO;
 }
 static HaogeCallRecorderRecordingTabRole HaogeCallRecorderRecordingRole(UIViewController *controller, NSUInteger depth) {
@@ -811,7 +810,7 @@ static void HaogeCallRecorderRetireRecordingEntry(HaogeCallRecorderRecordingTabE
     if (entry.haoge_callrecorder_replacement.presentedViewController)
         [entry.haoge_callrecorder_replacement dismissViewControllerAnimated:NO completion:nil];
 }
-static NSArray<UIViewController *> *HaogeCallRecorderRecordingTabs(UITabBarController *owner,
+static NSArray<UIViewController *> *HaogeCallRecorderRecordingTabs(
     NSArray<UIViewController *> *incoming, HaogeCallRecorderRecordingTabState *state) {
     NSMutableArray *tabs = [NSMutableArray array];
     NSMutableArray *next = [NSMutableArray array];
@@ -867,7 +866,7 @@ static void HaogeCallRecorderSetRecordingTabs(UITabBarController *owner, NSArray
     if (state.haoge_callrecorder_applying) {
         // UIKit may forward the filtered array to its other setter; Phone may instead rebuild a native array.
         // Normalize BOTH cases. Reentrancy suppresses nested repair, never identity filtering.
-        apply(HaogeCallRecorderRecordingTabs(owner, incoming, state));
+        apply(HaogeCallRecorderRecordingTabs(incoming, state));
         return;
     }
     NSArray *before = state.haoge_callrecorder_entries;
@@ -875,13 +874,13 @@ static void HaogeCallRecorderSetRecordingTabs(UITabBarController *owner, NSArray
     state.haoge_callrecorder_pendingSelection = nil;
     state.haoge_callrecorder_applying = YES;
     @try {
-        NSArray *tabs = HaogeCallRecorderRecordingTabs(owner, incoming, state);
+        NSArray *tabs = HaogeCallRecorderRecordingTabs(incoming, state);
         HaogeCallRecorderUpdateRecordingDelegate(owner, state);
         apply(tabs);
         // A Phone override can call super with a cached native array, bypassing our entry setter hooks.
         // Verify once, then repair through the public UIKit base implementation, NOT the Phone override.
         NSArray *actual = owner.viewControllers;
-        NSArray *checked = HaogeCallRecorderRecordingTabs(owner, actual, state);
+        NSArray *checked = HaogeCallRecorderRecordingTabs(actual, state);
         if (![actual isEqualToArray:checked]) {
             SEL selector = @selector(setViewControllers:animated:);
             IMP implementation = class_getMethodImplementation(UITabBarController.class, selector);
@@ -1015,7 +1014,7 @@ static void HaogeCallRecorderRefreshKnownRecordingTabs(void) {
             HaogeCallRecorderRecordingTabOwners = [NSHashTable weakObjectsHashTable];
             HaogeCallRecorderRecordingObservers = [NSMutableArray array];
             for (NSString *name in @[NSBundleDidLoadNotification, UIApplicationDidFinishLaunchingNotification,
-                                     UIApplicationDidBecomeActiveNotification, HaogeCallRecorderRecordingsChanged]) {
+                                     UIApplicationDidBecomeActiveNotification, HaogeSpringTwelvePreferencesChanged]) {
                 id observer = [NSNotificationCenter.defaultCenter addObserverForName:name object:nil queue:NSOperationQueue.mainQueue
                     usingBlock:^(NSNotification *note) { HaogeCallRecorderRefreshKnownRecordingTabs(); }];
                 [HaogeCallRecorderRecordingObservers addObject:observer];

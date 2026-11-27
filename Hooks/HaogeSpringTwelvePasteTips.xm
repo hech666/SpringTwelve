@@ -1,5 +1,4 @@
 // Adapted from the user's Clipboard-PasteTip-Source reconstruction.
-#import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
 #import <mach-o/dyld.h>

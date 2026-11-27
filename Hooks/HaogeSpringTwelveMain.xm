@@ -1,4 +1,3 @@
-#import <UIKit/UIKit.h>
 #import "HaogeSpringTwelveConfig.h"
 
 // Load the immutable preference snapshot before Logos hooks run.

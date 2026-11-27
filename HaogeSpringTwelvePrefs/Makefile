@@ -1,3 +1,4 @@
+ARCHS = arm64e
 include ../HaogeSpringTwelveBuild.mk
 include $(THEOS)/makefiles/common.mk
 

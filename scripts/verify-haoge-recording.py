@@ -23,10 +23,11 @@ page=plistlib.loads((R/'HaogeSpringTwelvePrefs/Resources/HaogeSpringTwelvePhone.
 found={i['key']:i for i in page['items'] if 'key' in i}
 for k in keys:
  assert k in found and found[k]['default'] is False and found[k]['defaults']=='com.haoge.springtwelve'
-switch=(R/'Sources/HaogeCallRecorderSwitches.h').read_text()
-assert 'return HaogeSpringTwelveOn(key);' in switch
+assert not (R/'Sources/HaogeCallRecorderSwitches.h').exists()
 for f in ['Hooks/HaogeCallRecording.xm','Hooks/HaogeRecordings.xm']:
  s=(R/f).read_text(); assert 'HaogeSpringTwelvePreferencesChanged' in s
+ assert '#import "HaogeSpringTwelveSwitches.h"' in s
+ assert 'HaogeCallRecorderOn(' not in s and 'HaogeSpringTwelveOn(' in s
  assert not re.search(r'\bAxsCallRecorder\b|\baxs_callrecorder\b|com\.axs\.callrecorder',s),f
 paths=(R/'Sources/HaogeSpringTwelvePaths.h').read_text()
 assert 'com.axs.springtwelve.plist' in paths and 'com.haoge.springtwelve.plist' in paths

@@ -23,7 +23,7 @@ enum HaogeSpringTwelvePowerHelperExitCode {
 static int haoge_springtwelve_parentMatches(pid_t expectedParent) {
     static const char expectedPath[] =
         "/System/Library/CoreServices/SpringBoard.app/SpringBoard";
-    /* Darwin PROC_PIDPATHINFO_MHAOGEIZE is 4096 bytes. */
+    /* Fixed libproc path buffer; reject truncation below. */
     char path[4096] = {0};
 
     if (expectedParent <= 1 || getppid() != expectedParent) {
@@ -52,13 +52,7 @@ int main(int argc, char *argv[]) {
         return HaogeSpringTwelvePowerHelperPermission;
     }
 
-    if (setgroups(0, NULL) != 0) {
-        return HaogeSpringTwelvePowerHelperElevation;
-    }
-    if (setgid((gid_t)0) != 0) {
-        return HaogeSpringTwelvePowerHelperElevation;
-    }
-    if (setuid((uid_t)0) != 0) {
+    if (setgroups(0, NULL) != 0 || setgid((gid_t)0) != 0 || setuid((uid_t)0) != 0) {
         return HaogeSpringTwelvePowerHelperElevation;
     }
     if (getuid() != (uid_t)0 || geteuid() != (uid_t)0 ||

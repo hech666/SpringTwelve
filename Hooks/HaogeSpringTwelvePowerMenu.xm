@@ -1,9 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
-#import <signal.h>
 #import <unistd.h>
-#import <errno.h>
 #import <string.h>
 #import <fcntl.h>
 #import "HaogeSpringTwelveSwitches.h"
@@ -41,6 +39,19 @@ static void haoge_springtwelve_powerLog(NSString *event) {
 @class HaogeSpringTwelvePowerMenuController;
 static HaogeSpringTwelvePowerMenuController *HaogeSpringTwelvePowerMenuActive;
 static char HaogeSpringTwelvePowerMenuTargetKey;
+
+// One ordered list backs presentation, enabled-state refresh and fixed logging.
+static const struct {
+    HaogeSpringTwelvePowerAction action;
+    __unsafe_unretained NSString *event;
+} HaogeSpringTwelvePowerMenuActions[] = {
+    {HaogeSpringTwelvePowerActionQuickRespring, @"quick-respring-request"},
+    {HaogeSpringTwelvePowerActionForceRespring, @"force-respring-request"},
+    {HaogeSpringTwelvePowerActionRespring, @"respring-request"},
+    {HaogeSpringTwelvePowerActionUserspaceReboot, @"userspace-reboot-request"},
+    {HaogeSpringTwelvePowerActionReboot, @"device-reboot-request"},
+    {HaogeSpringTwelvePowerActionShutdown, @"shutdown-request"}
+};
 
 static id haoge_springtwelve_powerShared(NSString *className) {
     Class cls = NSClassFromString(className);
@@ -243,12 +254,8 @@ static BOOL haoge_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
             message:controller.haoge_springtwelve_statusMessage preferredStyle:UIAlertControllerStyleAlert];
         controller.haoge_springtwelve_menu = menu;
         __weak UIAlertController *weakMenu = menu;
-        NSArray<NSNumber *> *selections = @[@(HaogeSpringTwelvePowerActionQuickRespring),
-            @(HaogeSpringTwelvePowerActionForceRespring), @(HaogeSpringTwelvePowerActionRespring),
-            @(HaogeSpringTwelvePowerActionUserspaceReboot), @(HaogeSpringTwelvePowerActionReboot),
-            @(HaogeSpringTwelvePowerActionShutdown)];
-        for (NSNumber *selection in selections) {
-            HaogeSpringTwelvePowerAction selected = (HaogeSpringTwelvePowerAction)selection.integerValue;
+        for (const auto &entry : HaogeSpringTwelvePowerMenuActions) {
+            HaogeSpringTwelvePowerAction selected = entry.action;
             BOOL available = haoge_springtwelve_powerActionAvailable(selected);
             NSString *title = haoge_springtwelve_powerActionTitle(selected);
             if (!available) title = [title stringByAppendingString:@" — 当前环境不可用"];
@@ -285,13 +292,9 @@ static BOOL haoge_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
     UIAlertController *menu = self.haoge_springtwelve_menu;
     if (menu && self.presentedViewController == menu) {
         menu.message = message;
-        NSArray<NSNumber *> *selections = @[@(HaogeSpringTwelvePowerActionQuickRespring),
-            @(HaogeSpringTwelvePowerActionForceRespring), @(HaogeSpringTwelvePowerActionRespring),
-            @(HaogeSpringTwelvePowerActionUserspaceReboot), @(HaogeSpringTwelvePowerActionReboot),
-            @(HaogeSpringTwelvePowerActionShutdown)];
-        for (NSUInteger i = 0; i < selections.count && i < menu.actions.count; i++) {
+        for (NSUInteger i = 0; i < sizeof(HaogeSpringTwelvePowerMenuActions) / sizeof(*HaogeSpringTwelvePowerMenuActions) && i < menu.actions.count; i++) {
             menu.actions[i].enabled = !self.haoge_springtwelve_executing &&
-                haoge_springtwelve_powerActionAvailable((HaogeSpringTwelvePowerAction)selections[i].integerValue);
+                haoge_springtwelve_powerActionAvailable(HaogeSpringTwelvePowerMenuActions[i].action);
         }
     } else if (!self.haoge_springtwelve_pendingAction && !self.haoge_springtwelve_confirmation) {
         [self haoge_springtwelve_showMenu];
@@ -373,15 +376,9 @@ static BOOL haoge_springtwelve_powerBlankPoint(UIView *home, CGPoint point) {
         controller.haoge_springtwelve_confirmation = nil;
         controller.haoge_springtwelve_executing = YES;
         [controller haoge_springtwelve_setStatus:@"正在提交操作，请勿重复点击。"];
-        NSDictionary<NSNumber *, NSString *> *events = @{
-            @(HaogeSpringTwelvePowerActionQuickRespring): @"quick-respring-request",
-            @(HaogeSpringTwelvePowerActionForceRespring): @"force-respring-request",
-            @(HaogeSpringTwelvePowerActionRespring): @"respring-request",
-            @(HaogeSpringTwelvePowerActionUserspaceReboot): @"userspace-reboot-request",
-            @(HaogeSpringTwelvePowerActionReboot): @"device-reboot-request",
-            @(HaogeSpringTwelvePowerActionShutdown): @"shutdown-request"
-        };
-        haoge_springtwelve_powerLog(events[@(selected)]);
+        for (const auto &entry : HaogeSpringTwelvePowerMenuActions) {
+            if (entry.action == selected) { haoge_springtwelve_powerLog(entry.event); break; }
+        }
         haoge_springtwelve_powerActionRequest(selected, ^(NSString *error) {
             HaogeSpringTwelvePowerMenuController *live = weakSelf;
             if (!live || live.haoge_springtwelve_closing || HaogeSpringTwelvePowerMenuActive != live) return;

@@ -1,5 +1,4 @@
 // Adapted from DisableBottomHomeBarSwipe.xm: preserve the original 64-bit destination.
-#import <Foundation/Foundation.h>
 #import <objc/runtime.h>
 #import <string.h>
 #import "HaogeSpringTwelveSwitches.h"

@@ -1,5 +1,7 @@
 HAOGE_CALLRECORDER_RT_DIR := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-include ../HaogeCallRecorderBuild.mk
+ARCHS = arm64e
+THEOS_PACKAGE_SCHEME ?= roothide
+include ../HaogeSpringTwelveBuild.mk
 HAOGE_CALLRECORDER_LAME_PREFIX ?= $(HAOGE_CALLRECORDER_RT_DIR)/../MP3Helper/.build/arm64e/install
 include $(THEOS)/makefiles/common.mk
 TOOL_NAME = HaogeCallRecorderRealtime
