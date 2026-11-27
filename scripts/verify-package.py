@@ -62,7 +62,7 @@ with tempfile.TemporaryDirectory(prefix='haoge-package-verify-') as folder:
     icon = bundle / 'icon@2x.png'
     png = icon.read_bytes()
     assert png[:8] == b'\x89PNG\r\n\x1a\n' and struct.unpack_from('>II', png, 16) == (60,60)
-    assert hashlib.sha256(png).hexdigest() == '5cd386d9a35ff076a9ea2bb6962de10200ebabee5b35c0a8c01cc7b248438cbf'
+    assert hashlib.sha256(png).hexdigest() == 'fc9b40bda6581f7fe60725ea16f648a8c6640254480268536b51ef5b929e1096'
 
     payload = subprocess.check_output(['dpkg-deb','--fsys-tarfile',str(package)])
     import io

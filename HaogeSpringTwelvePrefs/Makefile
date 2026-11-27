@@ -4,7 +4,8 @@ include $(THEOS)/makefiles/common.mk
 
 BUNDLE_NAME = HaogeSpringTwelvePrefs
 HaogeSpringTwelvePrefs_FILES = $(wildcard *.m)
-HaogeSpringTwelvePrefs_CFLAGS = -fobjc-arc -I../Sources
+HaogeSpringTwelvePrefs_CFLAGS = -fobjc-arc -I../Sources -g0 -flto
+HaogeSpringTwelvePrefs_LDFLAGS = -flto -Wl,-dead_strip
 HaogeSpringTwelvePrefs_FRAMEWORKS = UIKit Foundation CoreFoundation
 HaogeSpringTwelvePrefs_PRIVATE_FRAMEWORKS = Preferences
 ifeq ($(THEOS_PACKAGE_SCHEME),roothide)

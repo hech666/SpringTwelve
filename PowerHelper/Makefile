@@ -6,7 +6,8 @@ include $(THEOS)/makefiles/common.mk
 
 TOOL_NAME = HaogeSpringTwelvePowerHelper
 HaogeSpringTwelvePowerHelper_FILES = main.c
-HaogeSpringTwelvePowerHelper_CFLAGS = -std=c11 -Wall -Wextra
+HaogeSpringTwelvePowerHelper_CFLAGS = -std=c11 -Wall -Wextra -g0 -flto
+HaogeSpringTwelvePowerHelper_LDFLAGS = -flto -Wl,-dead_strip
 HaogeSpringTwelvePowerHelper_INSTALL_PATH = /usr/local/libexec
 # Theos uses CODESIGN_FLAGS (not CODE_SIGN_FLAGS); ldid requires -S<plist>.
 HaogeSpringTwelvePowerHelper_CODESIGN_FLAGS = -S"$(THEOS_PROJECT_DIR)/PowerHelper/entitlements.plist"
