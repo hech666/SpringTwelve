@@ -10,7 +10,7 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = HaogeSpringTwelve
 # One injection dylib; each module initializes hooks only in its intended host process.
 HaogeSpringTwelve_FILES = $(wildcard Hooks/*.xm Sources/*.m Sources/*.mm)
-HaogeSpringTwelve_CFLAGS = -fobjc-arc -I$(THEOS_PROJECT_DIR)/Headers -I$(THEOS_PROJECT_DIR)/Sources
+HaogeSpringTwelve_CFLAGS = -fobjc-arc -I$(THEOS_PROJECT_DIR)/Sources
 # Preserve the standalone recorder's visible compatibility warnings, scoped to imported files.
 Hooks/HaogeCallRecording.xm_CFLAGS += -Wall -Wextra -Wno-error=deprecated-declarations -Wno-error=unused-parameter
 Hooks/HaogeRecordings.xm_CFLAGS += -Wall -Wextra -Wno-error=deprecated-declarations -Wno-error=unused-parameter

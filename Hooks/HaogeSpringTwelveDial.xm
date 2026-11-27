@@ -4,7 +4,6 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 #import <mach-o/dyld.h>
-#import <string.h>
 #include <atomic>
 
 #pragma mark - Dynamic access and associated state
@@ -453,7 +452,7 @@ static NSString *HaogeDialT9Code(NSString *normalized, BOOL initialsOnly) {
         if (ch >= 'a' && ch <= 'z') {
             if (!initialsOnly || !inWord) {
                 unichar digit = HaogeDialT9DigitForLetter(ch);
-                if (digit) [code appendFormat:@"%C", digit];
+                [code appendFormat:@"%C", digit];
             }
             inWord = YES;
         } else {
@@ -479,8 +478,7 @@ static NSString *HaogeDialPhoneString(id labeledValue) {
     return [value isKindOfClass:[NSString class]] ? value : @"";
 }
 
-static BOOL HaogeDialContactMatches(id contact, NSString *digits, BOOL *nameMatched) {
-    if (nameMatched) *nameMatched = NO;
+static BOOL HaogeDialContactMatches(id contact, NSString *digits) {
     BOOL matchedByName = NO;
     NSString *family = HaogeDialContactString(contact, @"familyName");
     NSString *given = HaogeDialContactString(contact, @"givenName");
@@ -494,7 +492,6 @@ static BOOL HaogeDialContactMatches(id contact, NSString *digits, BOOL *nameMatc
         matchedByName = [HaogeDialT9Code(normalized, NO) hasPrefix:digits] ||
                         [HaogeDialT9Code(normalized, YES) hasPrefix:digits];
     }
-    if (nameMatched) *nameMatched = matchedByName;
     // Phone digits are deliberately not a search field; T9 matches only name prefixes.
     return matchedByName;
 }
@@ -503,7 +500,7 @@ static NSArray *HaogeDialFindCandidates(NSArray *contacts, NSString *digits) {
     if (!digits.length || !contacts.count) return @[];
     NSMutableArray *matches = [NSMutableArray arrayWithCapacity:8];
     for (id contact in contacts) {
-        if (!HaogeDialContactMatches(contact, digits, NULL)) continue;
+        if (!HaogeDialContactMatches(contact, digits)) continue;
         NSString *family = HaogeDialContactString(contact, @"familyName");
         NSString *given = HaogeDialContactString(contact, @"givenName");
         NSString *middle = HaogeDialContactString(contact, @"middleName");

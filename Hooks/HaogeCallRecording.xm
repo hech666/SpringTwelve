@@ -69,7 +69,6 @@ static void HaogeCallRecorderRecordLog(NSString *format, ...) {
     }
 }
 
-extern char **environ;
 static NSString * const HaogeCallRecorderRecordingStateChanged = @"com.haoge.springtwelve.recording.call-recording-state";
 static CFStringRef HaogeCallRecorderCallStatusNotification;
 static CFStringRef HaogeCallRecorderCallIdentificationNotification;
@@ -221,7 +220,6 @@ static CFStringRef HaogeCallRecorderCallIdentificationNotification;
 @public
     dispatch_queue_t _haoge_callrecorder_queue;
     HaogeCallRecorderRecordingWorker *_haoge_callrecorder_worker;
-    NSString *_haoge_callrecorder_outputPath;
     NSString *_haoge_callrecorder_statusPath;
     NSUInteger _haoge_callrecorder_generation;
     BOOL _haoge_callrecorder_active, _haoge_callrecorder_finishing, _haoge_callrecorder_failed;
@@ -405,7 +403,6 @@ static BOOL HaogeCallRecorderSpawn(NSString *path, NSArray<NSString *> *argument
     }
     NSString *name=[NSString stringWithFormat:@"HaogeSpringTwelve-%@.mp3",NSUUID.UUID.UUIDString];
     NSString *output=[directory stringByAppendingPathComponent:name];
-    _haoge_callrecorder_outputPath=output;
     _haoge_callrecorder_statusPath=[[directory stringByAppendingPathComponent:@"Diagnostics"] stringByAppendingPathComponent:[name stringByAppendingString:@".status"]];
     pid_t pid=0;int error=0;
     if (!HaogeCallRecorderSpawn(helper,@[output],&pid,&error)) {
@@ -435,7 +432,7 @@ static BOOL HaogeCallRecorderSpawn(NSString *path, NSArray<NSString *> *argument
             NSDictionary *naming=[namingContext haoge_callrecorder_finish];
             if(valid) {
                 @try {
-                    self->_haoge_callrecorder_outputPath=HaogeCallRecorderPublishReadableRecording(output,naming[@"number"],naming[@"contact"]);
+                    HaogeCallRecorderPublishReadableRecording(output,naming[@"number"],naming[@"contact"]);
                 } @catch (__unused NSException *namingException) {
                     // Name enrichment must never turn a valid recording into a failure.
                     HaogeCallRecorderRecordLog(@"readable naming unavailable; original recording retained");
