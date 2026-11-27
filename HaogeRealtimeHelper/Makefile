@@ -8,7 +8,7 @@ TOOL_NAME = HaogeCallRecorderRealtime
 HaogeCallRecorderRealtime_FILES = HaogeCallRecorderRealtime.mm HaogeCallRecorderPCM.cpp
 HaogeCallRecorderRealtime_CFLAGS = -fobjc-arc -Wall -Wextra -I../Sources -I$(HAOGE_CALLRECORDER_LAME_PREFIX)/include
 HaogeCallRecorderRealtime_CCFLAGS = -std=gnu++17
-HaogeCallRecorderRealtime_LDFLAGS = $(HAOGE_CALLRECORDER_LAME_PREFIX)/lib/libmp3lame.a
+HaogeCallRecorderRealtime_LDFLAGS = $(HAOGE_CALLRECORDER_LAME_PREFIX)/lib/libmp3lame.a -Wl,-dead_strip
 HaogeCallRecorderRealtime_FRAMEWORKS = Foundation AVFAudio AudioToolbox CoreFoundation
 HaogeCallRecorderRealtime_INSTALL_PATH = /usr/local/bin
 HaogeCallRecorderRealtime_CODESIGN_FLAGS = -S"$(HAOGE_CALLRECORDER_RT_DIR)/entitlements.plist"
