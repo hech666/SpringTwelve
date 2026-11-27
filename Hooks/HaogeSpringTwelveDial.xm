@@ -800,14 +800,6 @@ static void HaogeDialRefreshLater(id controller) {
     if (!HaogeDialDualEnabled()) return;
     id identity = objc_getAssociatedObject(sender, &HaogeDialIdentityKey);
     if (!identity) return;
-    SEL dialSelector = NSSelectorFromString(@"haoge_springtwelve_dialIdentity:");
-    if ([(id)self respondsToSelector:dialSelector])
-        ((void (*)(id, SEL, id))objc_msgSend)(self, dialSelector, identity);
-}
-
-%new
-- (void)haoge_springtwelve_dialIdentity:(id)identity {
-    if (!identity) return;
     id provider = HaogeDialGet(self, @"defaultCallProvider");
     SEL action = NSSelectorFromString(@"performCallActionForCallProvider:video:senderIdentity:");
     if (![(id)self respondsToSelector:action] || !provider) return;
