@@ -6,7 +6,7 @@ project = Path(__file__).resolve().parent.parent
 resources = Path(sys.argv[1]) if len(sys.argv) > 1 else project/'HaogeSpringTwelvePrefs/Resources'
 contract = json.loads((project/'scripts/preferences-contract.json').read_text())
 root = plistlib.loads((resources/'HaogeSpringTwelveRoot.plist').read_bytes())
-pages = [('Phone','电话设置',9),('DisableHide','禁用和隐藏',13),('General','常规设置',7)]
+pages = [('Phone','电话设置',9),('DisableHide','禁用和隐藏',13),('General','常规设置',8)]
 assert len(root['items']) == 3
 seen = {}
 for link,(name,title,count) in zip(root['items'], pages):
@@ -26,4 +26,4 @@ for link,(name,title,count) in zip(root['items'], pages):
 assert seen == contract, ('Lost/added/changed keys', set(contract)-set(seen),set(seen)-set(contract))
 for path in resources.glob('*.plist'):
     plistlib.loads(path.read_bytes())
-print('Preferences PASS: root=3 real links; child switches=9/13/7; all 29 keys unique; cell/default/domain/notification match contract; plist parse PASS')
+print('Preferences PASS: root=3 real links; child switches=9/13/8; all 30 keys unique; cell/default/domain/notification match contract; plist parse PASS')

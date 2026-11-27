@@ -100,6 +100,20 @@
 			<key>footerText</key>
 			<string>菜单中的注销与重启操作具有风险；所有破坏性操作均要求二次确认。</string>
 		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>微信输入法语音免跳转</string>
+			<key>key</key>
+			<string>weTypeVoiceNoJump</string>
+			<key>defaults</key>
+			<string>com.haoge.springtwelve</string>
+			<key>default</key>
+			<false/>
+			<key>footerText</key>
+			<string>适用于微信输入法语音转文字，减少切换画面；不适用于微信通话。请勿与其他同类免跳转功能同时开启。</string>
+		</dict>
 	</array>
 </dict>
 </plist>

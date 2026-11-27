@@ -38,6 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/verify-preferences.py
+          python3 scripts/verify-wetype-voice.py
           python3 scripts/verify-haoge-recording.py
           xcrun clang++ -std=gnu++17 -fobjc-arc -fblocks -Wall -Wextra -Werror -I Sources -framework Foundation tests/haoge-recording-filename-tests.mm -o "$RUNNER_TEMP/haoge-recording-filename-tests"
           "$RUNNER_TEMP/haoge-recording-filename-tests"

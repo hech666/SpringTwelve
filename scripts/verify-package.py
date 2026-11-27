@@ -34,6 +34,10 @@ with tempfile.TemporaryDirectory(prefix='haoge-package-verify-') as folder:
                    b'HaogeCallRecorderRealtime'):
         assert marker in binary, ('recording code missing from the single tweak dylib', marker)
     assert b'AxsCallRecorder' not in binary
+    for marker in (b'weTypeVoiceNoJump', b'com.tencent.wetype', b'WXKBURL_STARTVOICERECORD',
+                   b'animationDisabled', b'objectForActivationSetting:', b'flagForActivationSetting:',
+                   b'snapshotViewAfterScreenUpdates:'):
+        assert marker in binary, ('WeType voice module missing from the single tweak dylib', marker)
 
     filters = list(root.rglob('HaogeSpringTwelve.plist'))
     assert len(filters) == 1

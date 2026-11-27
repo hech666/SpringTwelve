@@ -143,5 +143,10 @@
     "cell": "PSSwitchCell",
     "defaults": "com.haoge.springtwelve",
     "default": false
+  },
+  "weTypeVoiceNoJump": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.haoge.springtwelve",
+    "default": false
   }
 }
