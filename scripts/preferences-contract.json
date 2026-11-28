@@ -148,5 +148,15 @@
     "cell": "PSSwitchCell",
     "defaults": "com.haoge.springtwelve",
     "default": false
+  },
+  "ios27StatusBarEnabled": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.haoge.springtwelve",
+    "default": false
+  },
+  "motionX120HzRecordingEnabled": {
+    "cell": "PSSwitchCell",
+    "defaults": "com.haoge.springtwelve",
+    "default": false
   }
 }

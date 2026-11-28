@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>title</key>
+	<string>杂七杂八</string>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>footerText</key>
+			<string>前两项开启或关闭后，请先结束录屏、通话并保存工作，再手动重启用户空间，普通应用也需重新启动；右上角“注销”不保证完整生效。高刷功能仅请求 120Hz 显示及系统录屏 120fps，实际效果取决于设备与系统，可能增加耗电和发热，不会改变屏幕硬件能力。请勿与独立 iOS27 状态栏、MotionX 或同类功能同时开启。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>iOS27 状态栏</string>
+			<key>key</key>
+			<string>ios27StatusBarEnabled</string>
+			<key>defaults</key>
+			<string>com.haoge.springtwelve</string>
+			<key>default</key>
+			<false/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>120hz加120hz 录屏</string>
+			<key>key</key>
+			<string>motionX120HzRecordingEnabled</string>
+			<key>defaults</key>
+			<string>com.haoge.springtwelve</string>
+			<key>default</key>
+			<false/>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>label</key>
+			<string>微信输入法语音免跳转</string>
+			<key>key</key>
+			<string>weTypeVoiceNoJump</string>
+			<key>defaults</key>
+			<string>com.haoge.springtwelve</string>
+			<key>default</key>
+			<false/>
+			<key>footerText</key>
+			<string>适用于微信输入法语音转文字，减少切换画面；不适用于微信通话。请勿与其他同类免跳转功能同时开启。</string>
+		</dict>
+	</array>
+</dict>
+</plist>

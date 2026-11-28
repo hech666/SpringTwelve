@@ -30,6 +30,14 @@
 			<key>detail</key>
 			<string>HaogeSpringTwelveGeneralListController</string>
 		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>label</key>
+			<string>杂七杂八</string>
+			<key>detail</key>
+			<string>HaogeSpringTwelveMiscListController</string>
+		</dict>
 	</array>
 </dict>
 </plist>

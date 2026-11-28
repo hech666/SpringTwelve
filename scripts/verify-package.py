@@ -38,12 +38,18 @@ with tempfile.TemporaryDirectory(prefix='haoge-package-verify-') as folder:
                    b'animationDisabled', b'objectForActivationSetting:', b'flagForActivationSetting:',
                    b'snapshotViewAfterScreenUpdates:'):
         assert marker in binary, ('WeType voice module missing from the single tweak dylib', marker)
+    for marker in (b'ios27StatusBarEnabled', b'STUIStatusBarWifiSignalView', b'_batteryTextColor',
+                   b'motionX120HzRecordingEnabled', b'RPMovieWriter', b'maximumFramesPerSecond',
+                   b'startSessionWithPID:windowSize:systemRecording:contextIDs:outputHandler:didStartHandler:'):
+        assert marker in binary, ('Misc module missing from the same injection dylib', marker)
 
     filters = list(root.rglob('HaogeSpringTwelve.plist'))
     assert len(filters) == 1
     assert plistlib.loads(filters[0].read_bytes()).get('Filter') == {
-        'Bundles': ['com.apple.springboard', 'com.apple.mobilephone'],
-        'Executables': ['druid', 'pasted'],
+        'Mode': 'Any',
+        'Bundles': ['com.apple.springboard', 'com.apple.mobilephone', 'com.apple.UIKit',
+                    'com.apple.UserNotificationsUIServer', 'com.apple.springboard.SpringBoardOutofCallUI'],
+        'Executables': ['druid', 'pasted', 'SpringBoard', 'backboardd', 'replayd'],
     }
 
     helpers = list(root.rglob('HaogeCallRecorderRealtime'))

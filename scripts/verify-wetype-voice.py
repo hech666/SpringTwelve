@@ -4,8 +4,8 @@ from pathlib import Path
 import itertools, json, plistlib
 project = Path(__file__).resolve().parent.parent
 source = (project/'Hooks/HaogeSpringTwelveWeTypeVoice.xm').read_text()
-general = plistlib.loads((project/'HaogeSpringTwelvePrefs/Resources/HaogeSpringTwelveGeneral.plist').read_bytes())
-item = [x for x in general['items'] if x.get('key') == 'weTypeVoiceNoJump']
+misc = plistlib.loads((project/'HaogeSpringTwelvePrefs/Resources/HaogeSpringTwelveMisc.plist').read_bytes())
+item = [x for x in misc['items'] if x.get('key') == 'weTypeVoiceNoJump']
 assert len(item) == 1 and item[0]['default'] is False
 assert item[0]['label'] == '微信输入法语音免跳转'
 assert item[0]['defaults'] == 'com.haoge.springtwelve'
@@ -60,4 +60,4 @@ clear(state)
 state['fading'].add('new'); state['visible'].add('new')
 state['fading'].discard('old'); state['visible'].discard('old')
 assert state['visible'] == {'new'} and state['fading'] == {'new'}
-print(f'PASS WeType integration: General default-OFF key, 2 SB-only hooks, exact constants; synthetic predicate cases={count}, lifecycle cases=7 (not iOS runtime tests)')
+print(f'PASS WeType integration: Misc default-OFF key, 2 SB-only hooks, exact constants; synthetic predicate cases={count}, lifecycle cases=7 (not iOS runtime tests)')

@@ -14,8 +14,11 @@ Hooks/HaogeCallRecording.xm_CFLAGS += -Wall -Wextra -Wno-error=deprecated-declar
 Hooks/HaogeRecordings.xm_CFLAGS += -Wall -Wextra -Wno-error=deprecated-declarations -Wno-error=unused-parameter
 Sources/HaogeCallRecorderRecordingAccess.mm_CFLAGS += -Wall -Wextra -Wno-error=deprecated-declarations -Wno-error=unused-parameter
 HaogeSpringTwelve_CCFLAGS = -std=gnu++17
-HaogeSpringTwelve_FRAMEWORKS = UIKit QuartzCore CoreGraphics CoreFoundation Foundation AVFoundation CoreTelephony Contacts CallKit
-HaogeSpringTwelve_LIBRARIES =
+# Imported modules keep their own ownership/exception semantics; recorder flags are unchanged.
+Sources/HaogeSpringTwelveMotionX.mm_CFLAGS += -fno-objc-arc -fobjc-exceptions -fcxx-exceptions -fexceptions -fblocks -Wno-unused-parameter
+$(foreach source,$(wildcard Sources/HaogeSpringTwelveI27*.mm),$(eval $(source)_CFLAGS += -fobjc-arc-exceptions -fobjc-exceptions -fcxx-exceptions -fexceptions -fblocks))
+HaogeSpringTwelve_FRAMEWORKS = UIKit QuartzCore CoreGraphics CoreFoundation Foundation AVFoundation CoreTelephony Contacts CallKit CoreMedia
+HaogeSpringTwelve_LIBRARIES = substrate
 ifeq ($(THEOS_PACKAGE_SCHEME),roothide)
   HaogeSpringTwelve_LIBRARIES += roothide
 endif
