@@ -44,6 +44,10 @@ jobs:
           "$RUNNER_TEMP/haoge-recording-filename-tests"
           xcrun clang++ -std=gnu++17 -fobjc-arc -fblocks -Wall -Wextra -Werror -I Sources -framework Foundation tests/haoge-misc-startup-tests.mm -o "$RUNNER_TEMP/haoge-misc-startup-tests"
           "$RUNNER_TEMP/haoge-misc-startup-tests"
+          xcrun clang++ -std=gnu++17 -fobjc-arc -fblocks -Wall -Wextra -Werror -framework Foundation tests/haoge-motionx-activation-tests.mm -o "$RUNNER_TEMP/haoge-motionx-activation-tests"
+          "$RUNNER_TEMP/haoge-motionx-activation-tests"
+          xcrun clang -std=c11 -Wall -Wextra -Werror tests/haoge-motionx-helper-tests.c -o "$RUNNER_TEMP/haoge-motionx-helper-tests"
+          "$RUNNER_TEMP/haoge-motionx-helper-tests"
           python3 scripts/verify-misc-integration.py
       - name: Build arm64e Roothide integrated package
         shell: bash

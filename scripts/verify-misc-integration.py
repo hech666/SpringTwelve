@@ -43,4 +43,14 @@ for rel, digest in {
     p=R/rel
     if digest=='ABSENT': assert not p.exists(), rel
     else: assert hashlib.sha256(p.read_bytes()).hexdigest()==digest, rel
-print('PASS Misc source integration: 2 startup-gated explicit installers; no imported constructor; 1 dylib; MRC scoped; original install scripts unchanged (not hook/device tests)')
+# v47: destructive action is downstream of successful persistence only.
+prefs=(R/'HaogeSpringTwelvePrefs/HaogeSpringTwelveRootListController.m').read_text()
+writer=prefs.index('if (!haoge_springtwelve_writePreference(key, value, &error))')
+callback=prefs.index('[self haoge_springtwelve_didSavePreference:key', writer)
+assert '[self reloadSpecifiers];\n        return;' in prefs[writer:callback]
+page=(R/'HaogeSpringTwelvePrefs/HaogeSpringTwelveMiscListController.m').read_text()
+assert 'haoge_springtwelve_motionXNeedsServiceRestart(key, previousValue, currentValue)' in page
+assert '"restart-motionx-services"' in page and 'posix_spawn(&pid' in page
+misc=plistlib.loads((R/'HaogeSpringTwelvePrefs/Resources/HaogeSpringTwelveMisc.plist').read_bytes())
+assert all('footerText' not in item for item in misc['items'] if item.get('cell')=='PSGroupCell')
+print('PASS Misc source integration: 2 startup-gated explicit installers; 1 dylib; MRC scoped; install scripts unchanged; v47 saved-only restart and no group footer (not hook/device tests)')

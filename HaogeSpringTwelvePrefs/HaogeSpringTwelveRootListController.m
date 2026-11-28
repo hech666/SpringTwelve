@@ -132,6 +132,7 @@ static BOOL haoge_springtwelve_prefsSignature(id target, SEL selector, char resu
 - (void)setPreferenceValue:(id)value specifier:(PSSpecifier *)specifier {
     NSString *key = [specifier propertyForKey:@"key"];
     if (key.length == 0) return;
+    id previousValue = [self readPreferenceValue:specifier];
     NSError *error = nil;
     if (!haoge_springtwelve_writePreference(key, value, &error)) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"设置未保存"
@@ -140,7 +141,17 @@ static BOOL haoge_springtwelve_prefsSignature(id target, SEL selector, char resu
         [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
         [self reloadSpecifiers];
+        return;
     }
+    // The atomic file write and notification have completed before side effects.
+    [self haoge_springtwelve_didSavePreference:key previousValue:previousValue
+        currentValue:haoge_springtwelve_readPreferences()[key]];
+}
+
+- (void)haoge_springtwelve_didSavePreference:(__unused NSString *)key
+                            previousValue:(__unused id)previousValue
+                             currentValue:(__unused id)currentValue {
+    // No side effects for the existing pages or unrelated switches.
 }
 
 @end
